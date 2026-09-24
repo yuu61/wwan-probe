@@ -1,8 +1,9 @@
 # Domain: EARFCN -> LTE band mapping (pure, no I/O).
-# 3GPP TS 36.101 Table 5.7.3-1 (E-UTRA DL channel numbers), cross-checked against the
-# srsRAN band table (lib/src/phy/common/phy_common.c). Each entry is the first DL EARFCN of the
-# band; a band ends where the next entry starts, so unassigned gaps are attributed to the band
-# below them (harmless for display). Name = common frequency label, "T" = TDD.
+# 3GPP TS 36.101 Table 5.7.3-1 (E-UTRA DL channel numbers) up to band 71, as in the srsRAN band
+# table (lib/src/phy/common/phy_common.c) it was cross-checked against. That table also stops at
+# band 71 and has no band 53, so band 53 (60140-) and bands 72+ (68936-) show as "B?/<EARFCN>". Each entry is
+# the first DL EARFCN of the band; a band ends where the next entry starts, so unassigned gaps are
+# attributed to the band below them (harmless for display). Name = common frequency label, "T" = TDD.
 $script:LteBandTable = @(
     @(0, 1, '2100'), @(600, 2, '1900'), @(1200, 3, '1800'), @(1950, 4, 'AWS'), @(2400, 5, '850')
     @(2650, 6, '800'), @(2750, 7, '2600'), @(3450, 8, '900'), @(3800, 9, '1800'), @(4150, 10, 'AWS')
@@ -21,7 +22,9 @@ $script:LteBandTable = @(
     @(67836, 69, '2600'), @(68336, 70, 'AWS'), @(68586, 71, '600'), @(68936, $null, $null)
 )
 
-function Get-EarfcnBand([long]$earfcn) {
+# Nullable so a missing EARFCN (WinRT ChannelNumber $null) is not read as 0 = band 1.
+function Get-EarfcnBand([Nullable[long]]$earfcn) {
+    if ($null -eq $earfcn) { return 'B?' }
     $entry = $null
     foreach ($e in $script:LteBandTable) {
         if ($earfcn -lt $e[0]) { break }

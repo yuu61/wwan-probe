@@ -16,8 +16,9 @@ function Get-ModemCellsInfo($Network) {
 #   Verb    = MBIM command type used by libmbim / mbimcli for the AT command
 #   Framing = 'Crlf': request is "<cmd>\r\n" as ASCII, response is the raw AT response text
 #             'Qdu':  request is UINT32 CommandType (0 = AT) + "<cmd>", response is UINT32 status (0 = OK) + text
+#   Profile = AtProfile.ps1 Id the service implies (it exists on one chipset family only), or none
 $script:MbimAtChannels = @(
-    [pscustomobject]@{ Name = 'Intel AT Tunnel'; ServiceId = [guid]'da138c64-6515-4893-92b2-a1e1ca7c81ca'; Cid = [uint32]1; Verb = 'Set'; Framing = 'Crlf' }
+    [pscustomobject]@{ Name = 'Intel AT Tunnel'; ServiceId = [guid]'da138c64-6515-4893-92b2-a1e1ca7c81ca'; Cid = [uint32]1; Verb = 'Set'; Framing = 'Crlf'; Profile = 'Intel' }
     [pscustomobject]@{ Name = 'Fibocom AT'; ServiceId = [guid]'ffffffff-abca-4b11-a4e2-f2fc87f94488'; Cid = [uint32]1; Verb = 'Set'; Framing = 'Crlf' }
     [pscustomobject]@{ Name = 'Compal AT'; ServiceId = [guid]'a2a32a97-cab1-4f57-9ae1-451c74dda957'; Cid = [uint32]1; Verb = 'Query'; Framing = 'Crlf' }
     # Quectel QDU is a firmware update service; only CID 8 (COMMAND) is ever sent.
@@ -33,25 +34,40 @@ function New-SerialAtChannel {
     return [pscustomobject]@{ Name = "Serial $PortName"; Port = $PortName }
 }
 
+# Sends one command for startup probing and returns its response ($null = no answer). A timed-out
+# command is sent once more: on the L860-GL the AT Tunnel was seen to drop a response right after
+# the process starts using it (no retry is needed once running).
+function Invoke-AtProbe($Modem, $Channel, [string]$Command, [int]$TimeoutMs = 1500) {
+    for ($try = 0; $try -lt 2; $try++) {
+        $r = (Invoke-ModemAtCommand -Modem $Modem -Channel $Channel -Command $Command -TimeoutMs $TimeoutMs)[$Command]
+        if ($null -ne $r) { return $r }
+    }
+    return $null
+}
+
 # Finds the first MBIM AT channel that answers "AT" with OK, or $null. $Tried receives one
-# "<name>: <reason>" line per rejected candidate (for diagnostics).
+# "<name>: <reason>" line per service that did not answer OK (for diagnostics).
+# When none answers, a service with a Profile whose session opened is still returned (as a copy
+# with Unconfirmed = $true): it only exists on that chipset, and its lost startup answers must not
+# disable AT for the whole session (each sample tolerates failed commands).
 function Find-ModemAtChannel($Modem, [System.Collections.Generic.List[string]]$Tried, [int]$TimeoutMs = 1500) {
+    $fallback = $null
     foreach ($channel in $script:MbimAtChannels) {
         try {
-            # Sent twice at most: the first response after the process starts using a service can be lost.
-            $response = $null
-            for ($try = 0; $try -lt 2 -and $null -eq $response; $try++) {
-                $response = (Invoke-ModemAtCommand $Modem $channel -Command 'AT' -TimeoutMs $TimeoutMs)['AT']
-            }
+            $response = Invoke-AtProbe -Modem $Modem -Channel $channel -Command 'AT' -TimeoutMs $TimeoutMs
             if ($response -match '(?m)^OK\s*$') { return $channel }
             $reason = if ($null -eq $response) { 'no response' } else { 'no OK' }
+            if ($null -eq $fallback -and $channel.Profile) {
+                $fallback = $channel.psobject.Copy()
+                $fallback | Add-Member -NotePropertyName Unconfirmed -NotePropertyValue $true
+            }
         }
         catch {
             $reason = $_.Exception.Message
         }
         if ($null -ne $Tried) { $Tried.Add("$($channel.Name): $reason") }
     }
-    return $null
+    return $fallback
 }
 
 # Sends the commands in order over one session of $Channel. Returns @{ <command> = <raw response text> }
@@ -87,7 +103,9 @@ function Invoke-ModemAtCommand($Modem, $Channel, [string[]]$Command, [int]$Timeo
             $text = $null
             if ($result.StatusCode -eq 0) {
                 $buffer = $responseData.GetValue($result)
-                $bytes = if ($buffer) { $toArray.Invoke($null, [object[]]@($buffer)) } else { [byte[]]@() }
+                # Assigned directly: an if-expression would unroll the byte[] and turn an empty one into $null.
+                $bytes = [byte[]]::new(0)
+                if ($buffer) { $bytes = $toArray.Invoke($null, [object[]]@($buffer)) }
                 $text = ConvertFrom-MbimAtResponse $Channel.Framing $bytes
             }
             $responses[$cmd] = $text
@@ -110,6 +128,7 @@ function ConvertTo-MbimAtRequest([string]$Framing, [string]$Command) {
 # Response bytes -> AT response text. For QDU the status word decides the final result code
 # when the text itself carries none (undocumented whether it does), so the parsers can rely on it.
 function ConvertFrom-MbimAtResponse([string]$Framing, [byte[]]$Bytes) {
+    if ($null -eq $Bytes) { $Bytes = [byte[]]::new(0) }
     if ($Framing -ne 'Qdu') { return [Text.Encoding]::ASCII.GetString($Bytes) }
     if ($Bytes.Count -lt 4) { return $null }
     $status = [BitConverter]::ToUInt32($Bytes, 0)
@@ -130,8 +149,10 @@ function Invoke-SerialAtCommand([string]$PortName, [string[]]$Command, [int]$Tim
     $port = [System.IO.Ports.SerialPort]::new($PortName, 115200)
     $port.NewLine = "`r`n"
     $port.ReadTimeout = 100
-    $port.Open()
+    # USB AT ports may ignore input until DTR is asserted (fibocom-connect-fm350 sets it for the FM350 "MD AT" port).
+    $port.DtrEnable = $true
     try {
+        $port.Open()
         $port.DiscardInBuffer()
         foreach ($cmd in $Command) {
             $port.Write("$cmd`r")

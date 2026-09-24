@@ -153,7 +153,8 @@ function ConvertFrom-QnwprefcfgResponse([hashtable]$Responses) {
     }
     $mode = & $value 'mode_pref'
     if (-not $mode) { return $null }
-    $names = @{ WCDMA = '3G'; LTE = '4G'; NR5G = '5G' }
+    # GSM is not in the RM5xx manual; mapped so a module that lists it still gets the 2G warning.
+    $names = @{ GSM = '2G'; WCDMA = '3G'; LTE = '4G'; NR5G = '5G' }
     $allowed = if ($mode -eq 'AUTO') { '3G+4G+5G (AUTO)' }
     else { (@($mode -split ':' | ForEach-Object { if ($names[$_]) { $names[$_] } else { $_ } }) | Sort-Object) -join '+' }
     $bands = { param($name) @((& $value $name) -split ':' | ForEach-Object { ConvertFrom-AtInt $_ } | Where-Object { $null -ne $_ }) }
@@ -161,8 +162,9 @@ function ConvertFrom-QnwprefcfgResponse([hashtable]$Responses) {
         Allowed   = $allowed
         Preferred = $null
         GsmBands  = @()
-        UmtsBands = & $bands 'gw_band'
-        LteBands  = & $bands 'lte_band'
-        NrBands   = & $bands 'nr5g_band'
+        # @() keeps a single band or none an array (a script block's output is unrolled).
+        UmtsBands = @(& $bands 'gw_band')
+        LteBands  = @(& $bands 'lte_band')
+        NrBands   = @(& $bands 'nr5g_band')
     }
 }

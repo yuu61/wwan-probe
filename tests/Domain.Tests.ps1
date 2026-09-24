@@ -39,6 +39,7 @@ $bands = [ordered]@{
 foreach ($case in $bands.GetEnumerator()) {
     Assert-Equal $case.Value (Get-EarfcnBand $case.Key) "EARFCN $($case.Key)"
 }
+Assert-Equal 'B?' (Get-EarfcnBand $null) 'Missing EARFCN must not become band 1'
 Write-Output 'PASS: EARFCN band table'
 
 # WinRT RSRP / RSRQ: MBIM spec dBm / dB and L860-GL 3GPP indices
@@ -155,6 +156,12 @@ Assert-Equal 11 @($rat.NrBands).Count 'Quectel NR bands'
 Assert-Equal 10 @($rat.UmtsBands).Count 'Quectel WCDMA bands'
 $prefs['AT+QNWPREFCFG="mode_pref"'] = New-AtResponse '+QNWPREFCFG: "mode_pref",LTE:NR5G'
 Assert-Equal '4G+5G' (ConvertFrom-AtConfig (Get-AtProfile 'Quectel') $prefs).Allowed 'Quectel LTE:NR5G'
+$prefs['AT+QNWPREFCFG="mode_pref"'] = New-AtResponse '+QNWPREFCFG: "mode_pref",GSM:LTE'
+$prefs['AT+QNWPREFCFG="lte_band"'] = New-AtResponse '+QNWPREFCFG: "lte_band",3'
+$prefs['AT+QNWPREFCFG="nr5g_band"'] = "ERROR`r`n"
+$rat = ConvertFrom-AtConfig (Get-AtProfile 'Quectel') $prefs
+Assert-Equal '2G+4G' $rat.Allowed 'Quectel GSM is 2G'
+Assert-True ($rat.LteBands -is [array] -and $rat.NrBands -is [array] -and $rat.NrBands.Count -eq 0) 'Quectel band lists must stay arrays'
 Write-Output 'PASS: Quectel profile (RM5xx manual examples)'
 
 # Fibocom FM350: the "1,4,..." / "1,9,..." +GTCCINFO lines are real FM350 output (OpenWrt forum);
@@ -185,6 +192,8 @@ Assert-Equal -89 $status.Neighbors[0].RsrpDbm 'Fibocom neighbor RSRP'
 Assert-Equal 'B3/1800' $status.Neighbors[0].Band 'Fibocom neighbor band'
 Assert-Equal 1 @($status.Cells | Where-Object Rat -EQ 'NR').Count 'Fibocom NR cell'
 Assert-Equal 1 @($status.Cells | Where-Object Rat -EQ 'UMTS').Count 'Fibocom UMTS neighbor'
+$ca = ConvertFrom-GtcainfoResponse (New-AtResponse @('+GTCAINFO: PCC:103,358,1300,100,2,1,3,2,60', 'SCC 1:2,0,101,300,100,50,50,2,1,3,2,55'))
+Assert-Equal @(20, 10) $ca.BandwidthsMHz 'Fibocom PCC on the +GTCAINFO line, "SCC 1"'
 $fibocom.Remove('AT+GTCAINFO?')
 Assert-Equal @(20) (ConvertFrom-AtStatus (Get-AtProfile 'FibocomGt') $fibocom).Ca.BandwidthsMHz 'Fibocom single carrier without GTCAINFO'
 $rat = ConvertFrom-AtConfig (Get-AtProfile 'FibocomGt') @{ 'AT+GTACT?' = New-AtResponse '+GTACT: 17,6,,101,103,5078,50257,1' }
@@ -216,4 +225,37 @@ Assert-Equal 30 (ConvertFrom-QtempResponse (ConvertFrom-MbimAtResponse 'Qdu' $ok
 $fail = [byte[]](@(1, 0, 0, 0) + [Text.Encoding]::ASCII.GetBytes("`r`nOK`r`n"))
 Assert-True ((ConvertFrom-MbimAtResponse 'Qdu' $fail) -notmatch '(?m)^OK') 'QDU failure status must not look like OK'
 Assert-Equal "`r`nOK`r`n" (ConvertFrom-MbimAtResponse 'Crlf' ([Text.Encoding]::ASCII.GetBytes("`r`nOK`r`n"))) 'CRLF passthrough'
+Assert-Equal '' (ConvertFrom-MbimAtResponse 'Crlf' ([byte[]]::new(0))) 'CRLF empty response'
+Assert-Equal '' (ConvertFrom-MbimAtResponse 'Crlf' $null) 'CRLF missing buffer'
 Write-Output 'PASS: MBIM AT framing'
+
+# Startup detection (Initialize-ModemAt / Find-ModemAtChannel) with a simulated modem.
+# $script:mockAt maps a channel name to { param($command) <response or $null> }; other channels throw.
+. (Join-Path $root 'src/application/Snapshot.ps1')
+function Invoke-ModemAtCommand($Modem, $Channel, [string[]]$Command, [int]$TimeoutMs = 3000) {
+    $handler = $script:mockAt[$Channel.Name]
+    if ($null -eq $handler) { throw "$($Channel.Name) device service not available" }
+    $r = @{}
+    foreach ($c in $Command) { $script:sent.Add($c); $r[$c] = & $handler $c }
+    return $r
+}
+$script:sent = [System.Collections.Generic.List[string]]::new()
+
+$script:mockAt = @{ 'Intel AT Tunnel' = { param($c) $null } }
+$at = Initialize-ModemAt $null ''
+Assert-True ($at.Channel.Name -eq 'Intel AT Tunnel' -and $at.Channel.Unconfirmed -and $at.Profile.Id -eq 'Intel' -and $null -eq $at.Error) 'Intel AT Tunnel with lost answers must keep the Intel set'
+Assert-Equal 2 $script:sent.Count 'A silent Intel AT Tunnel gets only the two AT tries, no profile probes'
+Assert-True (-not $script:MbimAtChannels[0].psobject.Properties['Unconfirmed']) 'The channel table must not be modified'
+$script:mockAt = @{ 'Intel AT Tunnel' = { param($c) '' } }
+Assert-Equal 'Intel' (Initialize-ModemAt $null '').Profile.Id 'Intel AT Tunnel with empty answers must keep the Intel set'
+$script:mockAt = @{ 'Intel AT Tunnel' = { param($c) if ($c -eq 'AT') { New-AtResponse @() } } }
+$at = Initialize-ModemAt $null ''
+Assert-True (-not $at.Channel.Unconfirmed -and $at.Profile.Id -eq 'Intel') 'Intel AT Tunnel with a lost probe keeps the Intel set'
+$script:mockAt = @{ 'Fibocom AT' = { param($c) if ($c -in 'AT', 'AT+GTCAINFO=?') { New-AtResponse @() } else { "ERROR`r`n" } } }
+$at = Initialize-ModemAt $null ''
+Assert-True ($at.Channel.Name -eq 'Fibocom AT' -and $at.Profile.Id -eq 'FibocomGt') 'Missing Intel service falls through to Fibocom GT'
+Assert-Equal 1 @($at.Tried).Count 'Rejected services are listed'
+$script:mockAt = @{ 'Fibocom AT' = { param($c) $null } }
+$at = Initialize-ModemAt $null ''
+Assert-True ($null -eq $at.Channel -and $at.Error -eq 'no AT channel (4 MBIM services tried)') 'A silent service without a Profile is rejected'
+Write-Output 'PASS: AT channel and command set detection'

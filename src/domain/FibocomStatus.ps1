@@ -61,12 +61,13 @@ function ConvertFrom-GtccinfoResponse([string]$Response) {
 #   PCC:<band>,<pci>,<earfcn>,<dl_bandwidth RB>,...
 #   SCC<n>:<scell_state>,<ul_configured>,<band>,<pci>,<earfcn>,<dl_bandwidth RB>,...
 # band 101..199 = 100 + E-UTRA band (NR carriers, band >= 501, are skipped).
+# The first carrier may follow "+GTCAINFO:" on the same line (as fibocom-connect-fm350 also accepts).
 function ConvertFrom-GtcainfoResponse([string]$Response) {
     if (-not $Response -or $Response -notmatch '(?m)^OK\s*$') { return $null }
     $pcc = $false
     $bandwidths = @()
     foreach ($line in ($Response -split "`r?`n")) {
-        if ($line -notmatch '^\s*(PCC|SCC\d*)\s*:\s*(.+?)\s*$') { continue }
+        if ($line -notmatch '^\s*(?:\+GTCAINFO:\s*)?(PCC|SCC\s*\d*)\s*:\s*(.+?)\s*$') { continue }
         $f = @($Matches[2] -split ',' | ForEach-Object { $_.Trim() })
         $isPcc = $Matches[1] -eq 'PCC'
         $o = if ($isPcc) { 0 } else { 2 }  # offset of <band>

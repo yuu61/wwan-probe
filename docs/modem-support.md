@@ -42,7 +42,7 @@ MBIM の仕様 ([MB base stations information query support](https://learn.micro
 | Fibocom AT | `ffffffff-abca-4b11-a4e2-f2fc87f94488` | 1 | SET | `"<AT>\r\n"` / 応答テキスト | Fibocom (libmbim に Fibocom 社員が追加) |
 | Compal AT | `a2a32a97-cab1-4f57-9ae1-451c74dda957` | 1 | QUERY | `"<AT>\r\n"` / 応答テキスト | Compal 製モジュール |
 | Quectel QDU | `6427015f-579d-48f5-8c54-f43ed1e76f83` | 8 | SET | UINT32 種別 (0 = AT) + `"<AT>"` / UINT32 状態 (0 = OK) + 応答テキスト | Quectel (Qualcomm 系) |
-| シリアル (COM) ポート | - | - | - | `"<AT>\r"` / `OK` / `ERROR` 行まで | `-AtPort COMx` を指定したとき |
+| シリアル (COM) ポート | - | - | - | `"<AT>\r"` / `OK` / `ERROR` 行まで (115200 bps、DTR オン) | `-AtPort COMx` を指定したとき |
 
 - 出典はすべて libmbim:
   [data/mbim-service-*.json](https://github.com/linux-mobile-broadband/libmbim/tree/main/data) (メッセージ形式)、
@@ -57,10 +57,14 @@ MBIM の仕様 ([MB base stations information query support](https://learn.micro
 - COM ポートは、ベンダードライバが AT ポートを公開している場合に使えます
   (例: FM350-GL の `MD AT` ポート ([fibocom-connect-fm350](https://github.com/prusa-dev/fibocom-connect-fm350) が使用)、Quectel の `Quectel USB AT Port`)。
   L860-GL の COM ポートは ModemControl ドライバが占有しているため開けません ([neighbor-cells.md](neighbor-cells.md) の 2.)。
+  USB の AT ポートは DTR が立っていないと入力を受け付けないことがあるため、fibocom-connect-fm350 と同じく DTR をオンにして開きます。
 - 実機 (L860-GL) で、プロセスが AT Tunnel を使い始めた直後に応答が 1 回返らない (タイムアウトする) ことがありました。
   起動時の判定 (`AT` とプローブ) はタイムアウトしたら 1 回だけ再送します。
 - 経路とコマンドセットの判定は**起動時に 1 回だけ**です。起動時にモデムが応答しなかった場合は、再起動するまで AT の値は取れません
   (Intel AT Tunnel の場合を除く。下記)。
+- Intel AT Tunnel だけは、セッションが開けたのに `AT` に `OK` が返らなかった (応答が落ちた・空だった) 場合も、
+  ほかの経路で `OK` が返らなければこの経路を使います (`Find-ModemAtChannel`)。このときはプローブを送らずに Intel のコマンドセットを使います。
+  プロファイル導入前と同じく、起動直後に応答が落ちても、以降の毎回の取得で値が取れるようにするためです。
 - AT の経路がないモデムでは、各 MBIM サービスを 1.5 秒のタイムアウト (と 1 回の再送) で順に試すため、起動に数秒かかることがあります。
   画面には `AT: unavailable (no AT channel (4 MBIM services tried))` と表示し、各サービスの失敗理由は `Summary.At.Tried` に残します。
 
@@ -92,7 +96,7 @@ MBIM の仕様 ([MB base stations information query support](https://learn.micro
 | SINR | `QCAINFO` の PCC `<RSSNR>` (dB、-10〜30)。なければ `QSINR` の PRX (dB、LTE のとき) | `QENG` の `<SINR>` は使わない: RM5xx のマニュアルの換算式は `Y = 1/5 × X × 10 - 20` だが、EC2x 系は 1/5 dB 単位 (`Y = X/5 - 20`) とされていて食い違い、機種を特定できないため (EC2x 系の定義は検索結果の要約で確認しただけで、マニュアル本文は未確認) |
 | CA | `QCAINFO` (帯域幅はリソースブロック数 6/15/25/50/75/100 = 1.4〜20 MHz) | PCC と、`<scell_state>` が 0 (deconfigured) 以外の SCC を数える。`QCAINFO` が何も返さないときは `QENG` の LTE サービングセルから「1 セル」とする (`<DL_bandwidth>` は XLEC と同じ 0〜5 のインデックス) |
 | 温度 | `QTEMP` | 全センサーのうち最も高い値 (℃)。RM5xx は 1 行 1 センサー (`"<sensor>","<temp>"`)。EM12 / EG25 系は `<pmic>,<xo>,<pa>` の 1 行とされる (Quectel フォーラムの例 `+QTEMP: 30,28,27` による。マニュアル本文は未確認)。範囲外 (-40〜125 以外) は無視 |
-| RAT / バンド | `QNWPREFCFG` | `mode_pref` の `AUTO` は「WCDMA & LTE & 5G NR」なので `3G+4G+5G (AUTO)` と表示し、ダウングレード可能と警告する。優先 RAT は取得しない |
+| RAT / バンド | `QNWPREFCFG` | `mode_pref` の `AUTO` は「WCDMA & LTE & 5G NR」なので `3G+4G+5G (AUTO)` と表示し、ダウングレード可能と警告する。`GSM` はマニュアルにない値だが、含まれていれば 2G として警告する。優先 RAT は取得しない |
 
 - `QENG="servingcell"` は EN-DC のとき `"servingcell",<state>` 行と `"LTE",...` 行に分かれ、フィールド位置が 2 つずれる。
   RAT 名のトークンを基準に位置を数えて両方に対応している。`<cellID>` と `<TAC>` は 16 進。
@@ -107,7 +111,7 @@ MBIM の仕様 ([MB base stations information query support](https://learn.micro
 | --- | --- | --- |
 | 近隣セル・2G/3G | `GTCCINFO?` | `+GTCCINFO:` の後に接頭辞なしの行が並ぶ。`<IsServiceCell>` 1 = サービング、2 = 近隣。`<rat>` 2 = WCDMA、4 = LTE、9 = NR。RSRP / RSRQ は 3GPP インデックス (RSRP 0 は「-140 dBm 未満または検出不可」なので値なし扱い)。TAC / Cell ID は 16 進、EARFCN / PCI は 10 進 (マニュアルに記載がないため、実機出力 `1,4,262,1,05D5,0019BF801,1300,358,103,100,13,60,60,22` ([OpenWrt フォーラム](https://forum.openwrt.org/t/fibocom-fm350-gl-support/142682/327)) と fibocom-connect-fm350 の実装で確認) |
 | SINR | `GTCCINFO` の LTE サービングセル `<rssnr_value>` | -100〜100 で **0.5 dB 刻み** とマニュアルに明記 (255 = 不明) |
-| CA | `GTCAINFO?` | `PCC:<band>,<pci>,<earfcn>,<dl_bw>,...` と `SCC<n>:<state>,<ul>,<band>,<pci>,<earfcn>,<dl_bw>,...`。帯域幅はリソースブロック数。`<band>` 101〜199 (LTE) のみ数え、NR (501〜) は除く |
+| CA | `GTCAINFO?` | `PCC:<band>,<pci>,<earfcn>,<dl_bw>,...` と `SCC<n>:<state>,<ul>,<band>,<pci>,<earfcn>,<dl_bw>,...`。帯域幅はリソースブロック数。`<band>` 101〜199 (LTE) のみ数え、NR (501〜) は除く。最初のキャリアが `+GTCAINFO:` と同じ行にある形式、`SCC 1:` のような空白入りも受け付ける (fibocom-connect-fm350 と同じ) |
 | 温度 | `GTSENRDTEMP=1` (センサー 1 = `soc_max`) | マニュアルに単位の記載がない。FM350 用の既存ツール ([fm350-util](https://github.com/wargio/fm350-util)、fibocom-connect-fm350) がいずれも 1000 で割っているので m℃ とみなす |
 | RAT / バンド | `GTACT?` | `<rat>` 1 = UMTS、2 = LTE、4 = LTE/UMTS、10 = 自動 (照会すると 20)、14 = NR、16 = NR/WCDMA、17 = NR/LTE、20 = NR/WCDMA/LTE。優先 2 = WCDMA、3 = LTE、6 = NR。バンドは 1〜99 = UMTS、101〜199 = 100 + LTE、`50` + n = NR n (501 = n1、5078 = n78、50257 = n257)。XACT とは符号が異なる |
 
