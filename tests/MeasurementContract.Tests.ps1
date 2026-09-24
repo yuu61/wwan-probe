@@ -1,4 +1,8 @@
 # Hardware-free regression checks for the shared measurement and adapter contracts.
+# Tests call Assert-* with positional arguments and build in-memory fixtures with New-* helpers.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPositionalParameters', '')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
+param()
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 . (Join-Path $root 'src/Load.ps1')

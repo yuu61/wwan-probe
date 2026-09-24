@@ -1,4 +1,8 @@
 # Hardware-free regression checks: pwsh -NoProfile -File tests/BandHighlight.Tests.ps1
+# Tests call Assert-* with positional arguments and build in-memory fixtures with New-* helpers.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPositionalParameters', '')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
+param()
 $ErrorActionPreference = 'Stop'
 . (Join-Path (Split-Path $PSScriptRoot -Parent) 'src/Load.ps1')
 

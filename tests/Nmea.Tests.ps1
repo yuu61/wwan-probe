@@ -1,5 +1,9 @@
 # Hardware-free NMEA satellite parsing, helper state, rendering and key checks.
 # Sentences are real L860-GL output (2026-09-24); coordinates are never involved.
+# Tests call Assert-* with positional arguments and build in-memory fixtures with New-* helpers.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPositionalParameters', '')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
+param()
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 . (Join-Path $root 'src/Load.ps1')

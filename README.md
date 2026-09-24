@@ -109,7 +109,7 @@ RAT の許可設定は `AllowedRats` (GSM / UMTS / LTE / NR) と表示文言を�
 
 ## 開発
 
-`tool.ps1` で PowerShell と C# (`Add-Type` で実行時にコンパイルする `src/`・`diagnostics/` の `.cs`) のリント・整形を行います。
+`tool.ps1` で PowerShell (リポジトリ内のすべての `.ps1`) と C# (`Add-Type` で実行時にコンパイルする `src/`・`diagnostics/` の `.cs`) のリント・整形を行います。
 
 ```powershell
 .\tool.ps1 lint           # PSScriptAnalyzer と Roslyn Analyzers
@@ -118,6 +118,8 @@ RAT の許可設定は `AllowedRats` (GSM / UMTS / LTE / NR) と表示文言を�
 ```
 
 - 必要なもの: PSScriptAnalyzer モジュール、.NET 10 SDK、`.\setup.ps1` で展開した `lib\` の DLL
+- `tests/` では位置指定パラメーター (`PSAvoidUsingPositionalParameters`) と ShouldProcess (`PSUseShouldProcessForStateChangingFunctions`) の指摘を、各テストファイル先頭の `SuppressMessageAttribute` で抑制しています
+- PSScriptAnalyzer によるリント・整形の実行中は `PATH` と `PSModulePath` を `$PSHOME` に絞っています (速度のため)。`$PSHOME` 以外のモジュールのコマンドは、コマンドを調べるルールの対象外になります
 - `global.json` で SDK を 10.0.x (インストール済みの最新の 10.0 系) に固定しています。`tool.ps1` はリポジトリ直下で `dotnet` を実行するので、どのディレクトリから呼んでもこの指定が効きます
 - C# は検査専用のプロジェクト `tools/csharp/WwanProbe.csproj` 経由で検査します。実行時には使いません。検査対象は PowerShell 7.4 (.NET 8) の `Add-Type` に合わせて net8.0 (C# 12)、implicit usings と nullable は無効です
 - Roslyn Analyzers は .NET 10 SDK 同梱のもの (`AnalysisLevel` = `latest-recommended`) を使い、警告もエラーとして扱います。書式やコードスタイルの設定は `.editorconfig` にあります
