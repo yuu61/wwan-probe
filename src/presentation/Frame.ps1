@@ -1,7 +1,8 @@
 # Presentation: builds one screen (frame) as a list of (Text, Color) lines.
 # Pure with respect to the console: no cursor / write operations here.
 #
-# View state: @{ Paused; Fetching; Done; Quit; LastWidth; LastHeight } (owned by the monitor loop)
+# View state: @{ Paused; Fetching; Done; Quit; Unicode; LastWidth; LastHeight } (owned by the monitor loop)
+# Unicode = console accepts non-ASCII glyphs (TUI switches to UTF-8; plain output does not).
 
 function New-FrameLine {
     # Pure factory (no state change), ShouldProcess is not applicable.
@@ -16,13 +17,37 @@ function Get-SectionRule([string]$Title, [int]$Width) {
     return $head + ("-" * [math]::Max(0, $Width - $head.Length))
 }
 
+# Appends one history chart (sparkline rows + stats line) to $Lines.
+function Add-HistoryChart {
+    param(
+        [System.Collections.Generic.List[object]]$Lines, [string]$Label, [double[]]$Values,
+        [double]$Min, [double]$Max, [string]$Unit, [string]$Color, [int]$Width, [bool]$Unicode
+    )
+    $head = " {0,-7} " -f $Label
+    $sparkWidth = [math]::Max(10, $Width - $head.Length - 4)
+    if ($Unicode) {
+        $rows = Get-BlockSparkline $Values $Min $Max $sparkWidth
+        $Lines.Add((New-FrameLine "$head|$($rows[0])|" $Color))
+        $Lines.Add((New-FrameLine ((" " * $head.Length) + "|$($rows[1])|") $Color))
+        $scale = "scale $Min..$Max $Unit, 16 levels"
+    }
+    else {
+        $Lines.Add((New-FrameLine "$head|$(Get-Sparkline $Values $Min $Max $sparkWidth)|" $Color))
+        $scale = "scale $Min..$Max ${Unit}: _ . - ~ = + * #"
+    }
+    $stat = Get-SignalStatistic $Values
+    $text = if ($null -eq $stat) { "(no valid samples)" } else {
+        "min {0} / avg {1} / max {2} {3}  (n={4}, {5})" -f $stat.Min, $stat.Avg, $stat.Max, $Unit, $stat.Count, $scale
+    }
+    $Lines.Add((New-FrameLine ((" " * ($head.Length + 1)) + $text) "DarkGray"))
+}
+
 function Get-MonitorFrame {
     param($Session, [hashtable]$View, [int]$Width)
 
     $config = $Session.Config
     $summary = $Session.Summary
     $snapshot = $Session.Snapshot
-    $history = $Session.History.ToArray()
 
     $lines = New-Object System.Collections.Generic.List[object]
     $rule = "=" * $Width
@@ -63,12 +88,10 @@ function Get-MonitorFrame {
         }
 
         # RSRP history (primary serving cell)
-        $stat = Get-RsrpStatistic $history
-        if ($null -ne $stat) {
-            $label = " History "
-            $spark = Get-RsrpSparkline $history ([math]::Max(10, $Width - $label.Length - 4))
-            $lines.Add((New-FrameLine ("$label|$spark|") "DarkGreen"))
-            $lines.Add((New-FrameLine ("          min {0} / avg {1} / max {2} dBm  (n={3}, scale -120..-70 dBm: _ . - ~ = + * #)" -f $stat.Min, $stat.Avg, $stat.Max, $stat.Count) "DarkGray"))
+        $rsrp = $Session.History.ToArray()
+        if ($rsrp.Count -gt 0) {
+            $lines.Add((New-FrameLine (Get-SectionRule "History (primary cell)" $Width) "DarkCyan"))
+            Add-HistoryChart -Lines $lines -Label "RSRP" -Values $rsrp -Min -120 -Max -70 -Unit "dBm" -Color "DarkGreen" -Width $Width -Unicode $View.Unicode
         }
 
         # Neighbors

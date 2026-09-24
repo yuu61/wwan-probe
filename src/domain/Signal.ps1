@@ -19,12 +19,14 @@ function Get-RsrpQuality([int]$dbm) {
     return "Very Poor"
 }
 
-function Get-RsrpStatistic([int[]]$Values) {
-    if (-not $Values -or $Values.Count -eq 0) { return $null }
-    $m = $Values | Measure-Object -Minimum -Maximum -Average
+# Min/Max/Avg of a signal series; NaN (missing sample) is ignored.
+function Get-SignalStatistic([double[]]$Values) {
+    $valid = @($Values | Where-Object { -not [double]::IsNaN($_) })
+    if ($valid.Count -eq 0) { return $null }
+    $m = $valid | Measure-Object -Minimum -Maximum -Average
     return [pscustomobject]@{
-        Min   = [int]$m.Minimum
-        Max   = [int]$m.Maximum
+        Min   = $m.Minimum
+        Max   = $m.Maximum
         Avg   = [math]::Round($m.Average, 1)
         Count = $m.Count
     }
