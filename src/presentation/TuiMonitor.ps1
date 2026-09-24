@@ -1,5 +1,5 @@
 # Presentation: interactive full-screen TUI loop.
-# Keys: q / Esc / Ctrl+C = quit, p = pause/resume, r = refresh now,
+# Keys: q / Esc / Ctrl+C = quit, p = pause/resume, r = refresh now, R = reset statistics,
 #       1-6 = show/hide one history chart, g = show/hide all charts,
 #       h = handover history, Up / Down = chart height or newer / older handovers
 
@@ -34,6 +34,8 @@ function Read-TuiInput([hashtable]$View) {
             $View.Dirty = $true
             if (-not $View.Paused -and -not $View.Fetching) { $View.RefreshRequested = $true }
         }
+        # Uppercase R (by character, so Caps Lock counts) resets; lowercase r refreshes.
+        if ($key.KeyChar -ceq 'R') { $View.ResetRequested = $true; continue }
         # An in-flight sample already satisfies a refresh request.
         if ($key.Key -eq 'R' -and -not $View.Fetching) { $View.RefreshRequested = $true }
         if ($key.Key -eq 'H') {
@@ -64,6 +66,13 @@ function Invoke-TuiLoop($Session, [hashtable]$View, $Sampler) {
     while (-not $view.Quit) {
         Read-TuiInput $view
         if ($view.Quit) { break }
+        # A sample still in flight is committed afterwards and counts toward the new statistics.
+        if ($view.ResetRequested) {
+            Reset-MonitorStatistic $Session
+            $view.ResetRequested = $false
+            $view.HandoverOffset = 0
+            $view.Dirty = $true
+        }
 
         if ($view.Fetching -and $sampler.Pending.IsCompleted) {
             Add-MonitorSnapshot $Session (Receive-MonitorSample $sampler)
@@ -91,7 +100,7 @@ function Invoke-TuiLoop($Session, [hashtable]$View, $Sampler) {
 function Invoke-TuiMonitor($Session) {
     $view = @{
         Paused = $false; Fetching = $false; Done = $false; Quit = $false; Unicode = $true
-        RefreshRequested = $true; LastWidth = 0; LastHeight = 0; ChartVisible = New-ChartVisibility
+        RefreshRequested = $true; ResetRequested = $false; LastWidth = 0; LastHeight = 0; ChartVisible = New-ChartVisibility
         ChartRows = $script:ChartRowsDefault; Dirty = $true
         HandoverVisible = $false; HandoverOffset = 0
     }

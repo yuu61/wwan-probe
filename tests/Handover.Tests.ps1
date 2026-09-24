@@ -187,3 +187,24 @@ $text = (Get-MonitorFrame $session $view 120).Body.Text -join "`n"
 Assert-True ($text -match ' RX +100k \|' -and $text -match ' TX +100k \|' -and ([regex]::Matches($text, 'log, 5\.3 levels/decade')).Count -eq 2) 'Unicode RX and TX must share axis labels.'
 $view.Unicode = $false
 Write-Output 'PASS: RX / TX shared scale'
+
+# Reset clears the statistics but keeps progress, the latest sample and the handover baseline.
+$session = Initialize-MonitorSession $null ([pscustomobject]@{ CsvPath = ''; Count = 0; Interval = 0 })
+foreach ($cellId in 100, 200) {
+    $sample = New-TestSnapshot $cellId
+    $sample.Serving = @([pscustomobject]@{ RsrpDbm = -90; RsrqDb = -10; Quality = 'Good' })
+    if ($cellId -eq 100) { $sample.Downgrade = [pscustomobject]@{ Level = 'Alert'; Reasons = @('test downgrade') } }
+    Add-MonitorSnapshot $session $sample
+}
+$resetView = @{ Unicode = $false; ChartVisible = New-ChartVisibility; ChartRows = 2; LastHeight = 24 }
+$text = (Get-MonitorFrame $session $resetView 120).Body.Text -join "`n"
+Assert-True ($session.HandoverLog.Count -eq 1 -and $session.History.Rsrp.Count -eq 2 -and $text -match 'seen earlier' -and $text -match 'History \(primary cell\)') 'Reset test setup failed.'
+Reset-MonitorStatistic $session
+Assert-True ($session.Iteration -eq 2 -and $session.Snapshot.PrimaryCell.CellId -eq 200) 'Reset changed progress or the latest sample.'
+Assert-True (@($session.History.Values | Where-Object { $_.Count -gt 0 }).Count -eq 0 -and $session.HandoverLog.Entries.Count -eq 0) 'Reset kept history.'
+$text = (Get-MonitorFrame $session $resetView 120).Body.Text -join "`n"
+Assert-True ($text -match 'Handover history \(0\)' -and $text -notmatch 'seen earlier' -and $text -notmatch 'History \(primary cell\)') 'Frame still shows reset statistics.'
+Add-MonitorSnapshot $session (New-TestSnapshot 300)
+$entry = $session.HandoverLog.Entries[0]
+Assert-True ($session.HandoverLog.Count -eq 1 -and $entry.Number -eq 1 -and $entry.From.CellId -eq 200 -and $entry.To.CellId -eq 300) 'Handover across the reset was lost or misnumbered.'
+Write-Output 'PASS: statistics reset keeps progress, the latest sample and the handover baseline'

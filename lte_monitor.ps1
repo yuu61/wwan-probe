@@ -6,6 +6,7 @@
 # AT commands (neighbors, temperature, SINR, CA) go over a vendor MBIM service found automatically;
 # AtPort uses that serial AT port instead (see docs/modem-support.md).
 # Keys:  q / Esc / Ctrl+C = quit,  p = pause/resume,  r = refresh now,
+#        R = reset statistics (history charts, handover history, 2G/3G log),
 #        1-6 = show/hide a history chart (RSRP/RSRQ/SNR/RX/TX/Temp),  g = show/hide all charts
 #        h = handover history, Up/Down = chart height or newer/older handovers
 # Requires PowerShell 7.4+ (Windows). Run .\setup.ps1 once beforehand to download

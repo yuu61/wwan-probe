@@ -246,7 +246,7 @@ function Add-HandoverSection {
     $count = if ($Log) { $Log.Count } else { 0 }
     $Lines.Add((New-FrameLine (Get-SectionRule "Handover history ($count) [h]" $Width) 'DarkCyan'))
     if ($null -eq $Log -or $Log.Entries.Count -eq 0) {
-        $Lines.Add((New-FrameLine ' (no LTE cell changes observed this session)' 'DarkGray'))
+        $Lines.Add((New-FrameLine ' (no LTE cell changes observed since start or reset)' 'DarkGray'))
         return
     }
     if ($View.HandoverVisible) {
@@ -298,7 +298,7 @@ function Get-MonitorFrame {
         Add-HandoverSection -Lines $lines -Log $Session.HandoverLog -View $View -Width $Width
         return [pscustomobject]@{
             Body   = $lines
-            Footer = New-FrameLine ' [h] Monitor  [Up/Down] Newer/Older  [q] Quit  [p] Pause  [r] Refresh' 'Black'
+            Footer = New-FrameLine ' [h] Monitor  [Up/Down] Newer/Older  [q] Quit  [p] Pause  [r] Refresh  [R] Reset stats' 'Black'
         }
     }
 
@@ -391,7 +391,7 @@ function Get-MonitorFrame {
 
     # Footer is returned separately so it can be pinned to the bottom row.
     $csvStr = if ($config.CsvPath) { "  CSV: $($config.CsvPath)" } else { '' }
-    $footer = New-FrameLine " [q] Quit  [p] Pause  [r] Refresh  [h] Handovers  [1-6] Chart  [g] All charts  [Up/Down] Chart rows   Interval: $($config.Interval)s$csvStr" 'Black'
+    $footer = New-FrameLine " [q] Quit  [p] Pause  [r] Refresh  [R] Reset  [h] Handovers  [1-6] Chart  [g] All charts  [Up/Down] Chart rows   Interval: $($config.Interval)s$csvStr" 'Black'
 
     return [pscustomobject]@{ Body = $lines; Footer = $footer }
 }
