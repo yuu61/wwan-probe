@@ -1,4 +1,4 @@
-# Presentation: builds one screen (frame) as a list of (Text, Color) lines.
+# Presentation: builds one screen as Text/Color lines with optional colored Segments.
 # Pure with respect to the console: no cursor / write operations here.
 #
 # View state: @{ Paused; Fetching; Done; Quit; Unicode; LastWidth; LastHeight; ChartVisible; ChartRows } (owned by the monitor loop)
@@ -9,9 +9,47 @@
 function New-FrameLine {
     # Pure factory (no state change), ShouldProcess is not applicable.
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
-    param([string]$Text = '', [string]$Color = 'Gray')
+    param([string]$Text = '', [string]$Color = 'Gray', [object[]]$Segments = @(), [Nullable[byte]]$GrayLevel = $null)
 
-    return [pscustomobject]@{ Text = $Text; Color = $Color }
+    if ($Segments.Count -gt 0) { $Text = ($Segments.Text -join '') }
+    return [pscustomobject]@{ Text = $Text; Color = $Color; Segments = $Segments; GrayLevel = $GrayLevel }
+}
+
+# Count currently observed LTE cells, not historical samples or physical sites.
+# EARFCN + PCI identifies duplicate observations across serving/neighbor lists.
+function Get-LteBandLine($Rat, $Snapshot) {
+    $counts = @{}
+    $seen = @{}
+    foreach ($cell in (@($Snapshot.Serving) + @($Snapshot.Neighbors))) {
+        if ($null -eq $cell -or $cell.Band -notmatch '^B(\d+)(?:/|$)') { continue }
+        $band = $Matches[1]
+        if ($null -ne $cell.Earfcn -and $null -ne $cell.Pci) {
+            $key = '{0}:{1}:{2}' -f $band, $cell.Earfcn, $cell.Pci
+            if ($seen.ContainsKey($key)) { continue }
+            $seen[$key] = $true
+        }
+        $counts[$band] = 1 + $counts[$band]
+    }
+
+    # Stretch the observed counts across the grayscale range so 1 vs 2 is visible.
+    # Only displayed bands determine the maximum; zero keeps the existing default.
+    $maxCount = 1
+    foreach ($band in $Rat.LteBands) { $maxCount = [math]::Max($maxCount, [int]$counts["$band"]) }
+    $segments = New-Object System.Collections.Generic.List[object]
+    $segments.Add((New-FrameLine ' LTE bands: ' 'DarkGray'))
+    foreach ($band in $Rat.LteBands) {
+        if ($segments.Count -gt 1) { $segments.Add((New-FrameLine ' ' 'DarkGray')) }
+        $count = $counts["$band"]
+        $grayLevel = $null
+        if ($count -gt 0) {
+            $grayLevel = if ($maxCount -eq 1) { 255 } else { [byte][math]::Round(144 + 111 * ($count - 1) / ($maxCount - 1)) }
+        }
+        $segments.Add((New-FrameLine "B$band" 'DarkGray' -GrayLevel $grayLevel))
+    }
+    if (@($Rat.NrBands).Count -gt 0) {
+        $segments.Add((New-FrameLine ('   NR bands: ' + (($Rat.NrBands | ForEach-Object { "n$_" }) -join ' ')) 'DarkGray'))
+    }
+    return New-FrameLine -Color 'DarkGray' -Segments $segments.ToArray()
 }
 
 function Get-SectionRule([string]$Title, [int]$Width) {
@@ -330,9 +368,7 @@ function Get-MonitorFrame {
         if ($rat.Preferred) { $ratText += " (prefer $($rat.Preferred))" }
         if ($legacyAllowed) { $ratText += "   2G/3G bands: $($legacyBands -join ' ')   [2G/3G enabled: downgrade possible]" }
         $lines.Add((New-FrameLine $ratText $(if ($legacyAllowed) { 'DarkYellow' } else { 'DarkGray' })))
-        $bandText = ' LTE bands: ' + (($rat.LteBands | ForEach-Object { "B$_" }) -join ' ')
-        if (@($rat.NrBands).Count -gt 0) { $bandText += '   NR bands: ' + (($rat.NrBands | ForEach-Object { "n$_" }) -join ' ') }
-        $lines.Add((New-FrameLine $bandText 'DarkGray'))
+        $lines.Add((Get-LteBandLine -Rat $rat -Snapshot $snapshot))
     }
 
     # Network
