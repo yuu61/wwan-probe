@@ -105,6 +105,22 @@ domain は他のレイヤーに依存せず、application が infrastructure の
 `src/Load.ps1` が共通のロード構成を管理します。エントリーポイントは全体を、測定 runspace は `-Components Core` で表示以外の共通部分を読み込みます。
 RAT の許可設定は `AllowedRats` (GSM / UMTS / LTE / NR) と表示文言を分け、2G/3G 許可の判定結果を application から画面に渡します。
 
+## 開発
+
+`tool.ps1` で PowerShell と C# (`Add-Type` で実行時にコンパイルする `src/`・`diagnostics/` の `.cs`) のリント・整形を行います。
+
+```powershell
+.\tool.ps1 lint           # PSScriptAnalyzer と Roslyn Analyzers
+.\tool.ps1 format         # Invoke-Formatter と dotnet format (whitespace / style) で整形
+.\tool.ps1 format -Check  # 整形が必要なファイルの報告のみ (変更しない)
+```
+
+- 必要なもの: PSScriptAnalyzer モジュール、.NET 10 SDK、`.\setup.ps1` で展開した `lib\` の DLL
+- `global.json` で SDK を 10.0.x (インストール済みの最新の 10.0 系) に固定しています。`tool.ps1` はリポジトリ直下で `dotnet` を実行するので、どのディレクトリから呼んでもこの指定が効きます
+- C# は検査専用のプロジェクト `tools/csharp/WwanProbe.csproj` 経由で検査します。実行時には使いません。検査対象は PowerShell 7.4 (.NET 8) の `Add-Type` に合わせて net8.0 (C# 12)、implicit usings と nullable は無効です
+- Roslyn Analyzers は .NET 10 SDK 同梱のもの (`AnalysisLevel` = `latest-recommended`) を使い、警告もエラーとして扱います。書式やコードスタイルの設定は `.editorconfig` にあります
+- `format` はアナライザーのコード修正 (`dotnet format analyzers`) を適用しません。動作が変わる修正もあるため、`lint` で報告して手で直します
+
 ## ドキュメント
 
 より詳細な技術情報については `docs/` 以下の Markdown ファイルを参照してください。

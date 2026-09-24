@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
@@ -139,7 +140,7 @@ namespace WwanProbe
                     if (ok) timedOut = false;
                 }
                 if (timedOut) return Array.Empty<byte>();
-                if (!ok) throw new Win32Exception(error, string.Format("GNSS IOCTL 0x{0:X} failed (Win32 error {1}).", code, error));
+                if (!ok) throw new Win32Exception(error, string.Format(CultureInfo.InvariantCulture, "GNSS IOCTL 0x{0:X} failed (Win32 error {1}).", code, error));
                 if (returned > outputSize) throw new InvalidOperationException("Invalid GNSS driver response size.");
                 byte[] data = new byte[returned];
                 if (data.Length > 0) Marshal.Copy(output, data, 0, data.Length);

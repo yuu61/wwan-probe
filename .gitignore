@@ -1,2 +1,4 @@
 lib/
 *.pdf
+tools/csharp/bin/
+tools/csharp/obj/
