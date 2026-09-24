@@ -13,20 +13,40 @@ function Get-ModemSummary($Modem) {
     }
 }
 
+function Get-LteNeighbor($Modem) {
+    $response = Invoke-ModemAtCommand $Modem 'AT+XMCI=1'
+    if ($response -notmatch '(?m)^OK\s*$') { throw "AT+XMCI failed: $($response.Trim())" }
+    $neighbors = @()
+    foreach ($cell in (ConvertFrom-XmciResponse $response)) {
+        if ($cell.Type -ne 'Neighbor') { continue }
+        $rsrpDbm = Convert-RsrpIndex $cell.RsrpIdx
+        if ($null -eq $rsrpDbm -or $null -eq $cell.Earfcn) { continue }
+        $neighbors += [pscustomobject]@{
+            RsrpDbm = $rsrpDbm
+            RsrqDb  = Convert-RsrqIndex $cell.RsrqIdx
+            Band    = Get-EarfcnBand $cell.Earfcn
+            Earfcn  = $cell.Earfcn
+            Pci     = $cell.Pci
+        }
+    }
+    return $neighbors
+}
+
 function Get-LteSnapshot($Modem) {
     $snapshot = [pscustomobject]@{
-        Timestamp    = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-        ProviderName = ""
-        ProviderId   = ""
-        DataClass    = ""
-        Apn          = ""
-        BwMbps       = 0
-        RxKB         = 0
-        TxKB         = 0
-        Serving      = @()
-        Neighbors    = @()
-        Umts         = @()
-        Error        = $null
+        Timestamp     = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        ProviderName  = ""
+        ProviderId    = ""
+        DataClass     = ""
+        Apn           = ""
+        BwMbps        = 0
+        RxKB          = 0
+        TxKB          = 0
+        Serving       = @()
+        Neighbors     = $null  # $null = unavailable (AT query failed), @() = none reported
+        NeighborError = $null
+        Umts          = @()
+        Error         = $null
     }
 
     try {
@@ -66,21 +86,13 @@ function Get-LteSnapshot($Modem) {
         }
         $snapshot.Serving = $serving
 
-        $neighbors = @()
-        foreach ($cell in $cellsInfo.NeighboringCellsLte) {
-            $nRsrpIdx = $cell.ReferenceSignalReceivedPowerInDBm
-            $nEarfcn = $cell.ChannelNumber
-            if ($nRsrpIdx -gt 0 -and $nEarfcn -gt 0) {
-                $neighbors += [pscustomobject]@{
-                    RsrpDbm = Convert-RsrpIndex $nRsrpIdx
-                    RsrqDb  = Convert-RsrqIndex $cell.ReferenceSignalReceivedQualityInDBm
-                    Band    = Get-EarfcnBand $nEarfcn
-                    Earfcn  = $nEarfcn
-                    Pci     = $cell.PhysicalCellId
-                }
-            }
+        # WinRT reports no neighbors for this modem, so ask it directly with AT+XMCI.
+        try {
+            $snapshot.Neighbors = Get-LteNeighbor $Modem
         }
-        $snapshot.Neighbors = $neighbors
+        catch {
+            $snapshot.NeighborError = $_.Exception.Message
+        }
 
         $umts = @()
         foreach ($cell in $cellsInfo.ServingCellsUmts) {

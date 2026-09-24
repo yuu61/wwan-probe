@@ -103,14 +103,20 @@ function Get-MonitorFrame {
                 -Scale @{ Step = 1; MinSpan = 4; Floor = -20; Ceiling = -3 } -Color "DarkYellow" -Width $Width -Unicode $View.Unicode
         }
 
-        # Neighbors
-        $lines.Add((New-FrameLine (Get-SectionRule "Neighbors ($($snapshot.Neighbors.Count))" $Width) "DarkCyan"))
-        if ($snapshot.Neighbors.Count -eq 0) {
-            $lines.Add((New-FrameLine " (none)" "DarkGray"))
+        # Neighbors (AT+XMCI via the Intel AT Tunnel service)
+        if ($null -eq $snapshot.Neighbors) {
+            $lines.Add((New-FrameLine (Get-SectionRule "Neighbors" $Width) "DarkCyan"))
+            $lines.Add((New-FrameLine " (unavailable: $($snapshot.NeighborError))" "DarkGray"))
         }
-        foreach ($n in ($snapshot.Neighbors | Sort-Object RsrpDbm -Descending)) {
-            $nBar = Get-RsrpBar $n.RsrpDbm
-            $lines.Add((New-FrameLine (" {0} {1,4} dBm {2,5} dB  {3,-10} EARFCN:{4,-6} PCI:{5}" -f $nBar, $n.RsrpDbm, $n.RsrqDb, $n.Band, $n.Earfcn, $n.Pci) "Gray"))
+        else {
+            $lines.Add((New-FrameLine (Get-SectionRule "Neighbors ($($snapshot.Neighbors.Count))" $Width) "DarkCyan"))
+            if ($snapshot.Neighbors.Count -eq 0) {
+                $lines.Add((New-FrameLine " (none)" "DarkGray"))
+            }
+            foreach ($n in ($snapshot.Neighbors | Sort-Object RsrpDbm -Descending)) {
+                $nBar = Get-RsrpBar $n.RsrpDbm
+                $lines.Add((New-FrameLine (" {0} {1,4} dBm {2,5} dB  {3,-10} EARFCN:{4,-6} PCI:{5}" -f $nBar, $n.RsrpDbm, $n.RsrqDb, $n.Band, $n.Earfcn, $n.Pci) "Gray"))
+            }
         }
 
         # UMTS
