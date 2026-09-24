@@ -1,6 +1,6 @@
 #Requires -Version 7.4
 # LTE Signal Monitor (TUI) for Windows mobile broadband modems (tested: Fibocom L860-GL)
-# Usage: .\lte_monitor.ps1 [-Interval 0] [-Count 0] [-CsvPath "log.csv"] [-AtPort COM7]
+# Usage: .\lte_monitor.ps1 [-Interval 0] [-Count 0] [-CsvPath "log.csv"] [-AtPort COM7] [-Gps]
 # Interval=0 means back-to-back sampling (each sample still takes ~1s for counters).
 # Count=0 means infinite loop. CsvPath enables CSV logging (one row per sample, see src/application/SnapshotLog.ps1).
 # AT commands (neighbors, temperature, SINR, CA) go over a vendor MBIM service found automatically;
@@ -21,7 +21,8 @@ param(
     [ValidateRange(0, 86400)][int]$Interval = 0,
     [ValidateRange(0, [int]::MaxValue)][int]$Count = 0,
     [string]$CsvPath = '',
-    [ValidatePattern('^(COM\d+)?$')][string]$AtPort = ''
+    [ValidatePattern('^(COM\d+)?$')][string]$AtPort = '',
+    [switch]$Gps
 )
 
 # Shared composition root; definitions must load into this script's scope.
@@ -42,11 +43,15 @@ if (-not $modem) {
 $config = [pscustomobject]@{ Interval = $Interval; Count = $Count; CsvPath = $CsvPath; AtPort = $AtPort }
 $session = Initialize-MonitorSession -Modem $modem -Config $config
 
-if ([Console]::IsInputRedirected -or [Console]::IsOutputRedirected) {
-    Invoke-PlainMonitor $session
+try {
+    if ($Gps) { $session.GpsReceiver = Start-GpsReceiver }
+    if ([Console]::IsInputRedirected -or [Console]::IsOutputRedirected) {
+        Invoke-PlainMonitor $session
+    }
+    else {
+        Invoke-TuiMonitor $session
+        Write-Output "LTE monitor stopped after $($session.Iteration) sample(s)."
+    }
 }
-else {
-    Invoke-TuiMonitor $session
-    Write-Output "LTE monitor stopped after $($session.Iteration) sample(s)."
-}
+finally { Stop-GpsReceiver $session.GpsReceiver }
 exit 0

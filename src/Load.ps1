@@ -14,6 +14,7 @@ $monitorSources = @(
     'infrastructure/FibocomStatus.ps1'
     'infrastructure/AtProfile.ps1'
     'infrastructure/WinRt.ps1'
+    'infrastructure/Gps.ps1'
     'infrastructure/Modem.ps1'
     'infrastructure/PerfCounter.ps1'
     'infrastructure/CsvFile.ps1'

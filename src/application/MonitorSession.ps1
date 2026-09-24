@@ -14,6 +14,7 @@ function Initialize-MonitorSession($Modem, $Config, [int]$HistoryMax = 600) {
         Config       = $Config
         Summary      = Get-ModemSummary $Modem $Config.AtPort
         Snapshot     = $null
+        GpsReceiver  = $null
         History      = New-SignalHistory
         HandoverLog  = New-HandoverLog
         DowngradeLog = New-DowngradeLog
@@ -39,7 +40,7 @@ function Reset-MonitorStatistic {
 
 # Takes one sample and updates the session (history, CSV).
 function Invoke-MonitorSample($Session) {
-    Add-MonitorSnapshot $Session (Get-LteSnapshot $Session.Modem $Session.Summary.At)
+    Add-MonitorSnapshot $Session (Get-LteSnapshot $Session.Modem $Session.Summary.At $Session.GpsReceiver)
 }
 
 # Commits a completed sample on the UI thread, so rendering never sees partial history.

@@ -29,6 +29,28 @@ function Format-TrafficRate($ValueKB) {
     return Format-SiValue ($ValueKB * 1024) 'B/s'
 }
 
+function Add-GpsSection([System.Collections.Generic.List[object]]$Lines, $Gps, [int]$Width) {
+    if ($null -eq $Gps) { return }
+    $Lines.Add((New-FrameLine (Get-SectionRule 'GPS / GNSS' $Width) 'DarkCyan'))
+    if ($Gps.Status -eq 'Fix') {
+        $Lines.Add((New-FrameLine (' Lat: {0:F6}   Lon: {1:F6}   Accuracy: {2}' -f
+                    $Gps.Latitude, $Gps.Longitude, (Format-OptionalValue $Gps.AccuracyM '{0:0.0} m')) 'Green'))
+        $Lines.Add((New-FrameLine (' Alt: {0}   Speed: {1}   Heading: {2}   HDOP: {3}' -f
+                    (Format-OptionalValue $Gps.AltitudeM '{0:0.0} m'), (Format-OptionalValue $Gps.SpeedMps '{0:0.0} m/s'),
+                    (Format-OptionalValue $Gps.HeadingDeg '{0:0.0} deg'), (Format-OptionalValue $Gps.Hdop '{0:0.0}'))))
+        $Lines.Add((New-FrameLine " Source: Satellite   Fix UTC: $($Gps.Timestamp)" 'DarkGray'))
+    }
+    else {
+        $detail = switch ($Gps.Status) {
+            'Disabled' { $Gps.Error }
+            'Unavailable' { $Gps.Error }
+            'Stale' { 'satellite report expired; waiting for a fresh fix' }
+            default { if ($Gps.Source) { "waiting for satellite fix; $($Gps.Source) position ignored" } else { 'waiting for satellite fix' } }
+        }
+        $Lines.Add((New-FrameLine " GPS: $($Gps.Status) ($detail)" 'DarkYellow'))
+    }
+}
+
 # $Ca: @{ Cells; BandwidthsMHz } (ConvertFrom-AtStatus)
 function Format-CarrierAggregation($Ca) {
     if ($null -eq $Ca) { return 'n/a' }
@@ -348,6 +370,8 @@ function Get-MonitorFrame {
         $lines.Add((New-FrameLine (' Temp: {0}   RSSNR: {1}   CA: {2}' -f
                     (Format-OptionalValue $snapshot.TempC '{0} C'), (Format-OptionalValue $snapshot.Rssnr '{0:0.0} dB'),
                     (Format-CarrierAggregation $snapshot.Ca))))
+
+        Add-GpsSection -Lines $lines -Gps $snapshot.Gps -Width $Width
 
         # Serving cells
         $lines.Add((New-FrameLine (Get-SectionRule 'Serving Cell (LTE)' $Width) 'DarkCyan'))

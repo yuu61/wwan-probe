@@ -24,12 +24,12 @@ function New-MonitorSampler {
 function Start-MonitorSample {
     # Starts a read-only measurement; no external state is changed.
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
-    param($Sampler, $Modem, $At)
+    param($Sampler, $Modem, $At, $GpsReceiver)
 
     if ($null -ne $Sampler.Pending) { throw 'A sample is already in progress.' }
     $Sampler.Pipeline.Commands.Clear()
     $Sampler.Pipeline.Streams.Error.Clear()
-    $null = $Sampler.Pipeline.AddCommand('Get-LteSnapshot').AddArgument($Modem).AddArgument($At)
+    $null = $Sampler.Pipeline.AddCommand('Get-LteSnapshot').AddArgument($Modem).AddArgument($At).AddArgument($GpsReceiver)
     $Sampler.Pending = $Sampler.Pipeline.BeginInvoke()
 }
 

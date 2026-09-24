@@ -12,6 +12,7 @@ Windows の PowerShell 7.4 以降で動作します。
 - **近隣セル情報の表示**: モデムの AT コマンド (L860-GL は MBIM の Intel AT Tunnel 経由の `AT+XMCI`) で近隣セル (Neighbor cells) の情報を取得・表示。AT で取れない場合は WinRT が報告する近隣セルを使用 (詳細は [`docs/neighbor-cells.md`](docs/neighbor-cells.md) 参照)
 - **複数ベンダーの AT コマンド**: 起動時に AT の経路 (Intel / Fibocom / Compal / Quectel の MBIM サービス、または COM ポート) とコマンドセット (Intel `+X`、Quectel `+Q`、Fibocom `+GT`) を自動判定 (詳細は [`docs/modem-support.md`](docs/modem-support.md) 参照)
 - **ハンドオーバー履歴**: LTE 主セルの変更を検出し、時刻と切り替え先の Cell ID・バンド・PCI などを表示
+- **GPS / GNSS 表示**: `-Gps` で衛星測位の緯度・経度・高度・精度・速度・方位・HDOP・測位時刻を表示。未測位や取得不能も表示 (詳細は [`docs/gps.md`](docs/gps.md) 参照)
 - **CSV ログ出力**: 取得した情報を CSV ファイルに記録可能
 
 ## 必須要件
@@ -38,7 +39,7 @@ PowerShell 7.4+ がインストールされている環境で、初回のみ Win
 以下のスクリプトを実行して TUI モニターを起動します。
 
 ```powershell
-.\lte_monitor.ps1 [-Interval <秒>] [-Count <回数>] [-CsvPath "log.csv"] [-AtPort COM7]
+.\lte_monitor.ps1 [-Interval <秒>] [-Count <回数>] [-CsvPath "log.csv"] [-AtPort COM7] [-Gps]
 ```
 
 ### 引数 (オプション)
@@ -47,6 +48,13 @@ PowerShell 7.4+ がインストールされている環境で、初回のみ Win
 - `-Count`: 測定回数。デフォルトは `0` で無限ループします。
 - `-CsvPath`: 指定すると、結果を CSV ファイルにログ出力します。
 - `-AtPort`: AT コマンドを MBIM ではなく指定の COM ポート (例: `COM7`) で送ります。ベンダードライバが AT ポートを公開しているモデム向けです。省略時は MBIM の AT サービスを自動で探します。
+- `-Gps`: Windows の GNSS ドライバー経路で衛星測位を取得します。GPS 以外 (Wi-Fi・基地局・IP 等) の座標は表示・記録しません。Windows の位置情報サービスとデスクトップアプリの位置情報アクセスを有効にしてください。API の制約により特定のモデムは選択できません。省略時は GPS を取得しません。
+
+GPS を表示し、LTE 測定と一緒に CSV へ記録する例:
+
+```powershell
+.\lte_monitor.ps1 -Gps -CsvPath "log.csv"
+```
 
 ### TUI での操作
 
@@ -100,3 +108,4 @@ RAT の許可設定は `AllowedRats` (GSM / UMTS / LTE / NR) と表示文言を�
 - [2G/3G ダウングレード検知](docs/downgrade-detection.md)
 - [近隣セル (Neighbors) の取得方法](docs/neighbor-cells.md)
 - [対応モデム (L860-GL 以外)](docs/modem-support.md)
+- [GPS / GNSS の取得と表示](docs/gps.md)

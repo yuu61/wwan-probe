@@ -84,7 +84,7 @@ function Invoke-TuiLoop($Session, [hashtable]$View, $Sampler) {
         if (-not $view.Done -and -not $view.Fetching -and
             ($view.RefreshRequested -or (-not $view.Paused -and (Get-Date) -ge $nextSample))) {
             $view.RefreshRequested = $false
-            Start-MonitorSample $sampler $Session.Modem $Session.Summary.At
+            Start-MonitorSample $sampler $Session.Modem $Session.Summary.At $Session.GpsReceiver
             $view.Fetching = $true
             $view.Dirty = $true
         }

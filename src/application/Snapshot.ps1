@@ -10,7 +10,7 @@ function Get-ModemSummary($Modem, [string]$AtPort) {
 # PrimaryCell is selected once; SecondaryCells contains the remaining carriers.
 # All consumers use these roles instead of selecting by measurement availability.
 # Missing values stay $null; Error, AtError and TrafficError identify failed sources.
-function Get-LteSnapshot($Modem, $At) {
+function Get-LteSnapshot($Modem, $At, $GpsReceiver) {
     $observation = Get-ModemObservation $Modem $At
     $serving = @($observation.Serving)
     foreach ($cell in $serving) {
@@ -36,6 +36,7 @@ function Get-LteSnapshot($Modem, $At) {
         Error          = $observation.Error
         AtError        = $observation.AtError
         TrafficError   = $observation.TrafficError
+        Gps            = Get-GpsObservation $GpsReceiver
         Downgrade      = $null
     }
     if (-not $observation.Error) {
