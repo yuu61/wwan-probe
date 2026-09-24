@@ -9,6 +9,7 @@ $ErrorActionPreference = 'Stop'
 $tests = @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'tests') -Filter '*.ps1' -File -Recurse)
 $targets = @(
     Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'src') -Filter '*.ps1' -File -Recurse
+    Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'diagnostics') -Filter '*.ps1' -File -Recurse
     Get-Item -LiteralPath (Join-Path $PSScriptRoot 'lte_monitor.ps1')
     $tests
 )

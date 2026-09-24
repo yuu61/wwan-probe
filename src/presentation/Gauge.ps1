@@ -12,6 +12,13 @@ function Get-RsrpBar($dbm) {
     return "[$filled$empty]"
 }
 
+# Satellite carrier-to-noise: 0 to 50 dB-Hz mapped to 0-20 chars. No SNR = not tracked.
+function Get-SnrBar($dbHz) {
+    if ($null -eq $dbHz) { return '[    not tracked     ]' }
+    $normalized = [math]::Max(0, [math]::Min(20, [int][math]::Floor($dbHz / 2.5)))
+    return '[' + ('#' * $normalized) + ('-' * (20 - $normalized)) + ']'
+}
+
 # Auto scale for a sparkline: [min, max] of the valid (non-NaN) values, snapped outward
 # to multiples of $Step, widened (around the data center) to at least $MinSpan so a steady
 # signal does not magnify noise, then shifted/clamped into [$Floor, $Ceiling].

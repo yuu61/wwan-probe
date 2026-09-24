@@ -1,7 +1,8 @@
 # Presentation: interactive full-screen TUI loop.
 # Keys: q / Esc / Ctrl+C = quit, p = pause/resume, r = refresh now, R = reset statistics,
 #       1-6 = show/hide one history chart, g = show/hide all charts,
-#       h = handover history, Up / Down = chart height or newer / older handovers
+#       h = handover history, s = satellite list (-Nmea),
+#       Up / Down = chart height, newer / older handovers or scroll satellites
 
 # Renders current state; clears the screen once when the window is resized.
 function Show-TuiScreen($Session, [hashtable]$View) {
@@ -41,10 +42,24 @@ function Read-TuiInput([hashtable]$View) {
         if ($key.Key -eq 'H') {
             $View.HandoverVisible = -not $View.HandoverVisible
             $View.HandoverOffset = 0
+            $View.SatelliteVisible = $false
+            $View.Dirty = $true
+            continue
+        }
+        if ($key.Key -eq 'S') {
+            $View.SatelliteVisible = -not $View.SatelliteVisible
+            $View.SatelliteOffset = 0
+            $View.HandoverVisible = $false
             $View.Dirty = $true
             continue
         }
         if ($key.Key -eq 'UpArrow' -or $key.Key -eq 'DownArrow') {
+            if ($View.SatelliteVisible) {
+                $delta = if ($key.Key -eq 'UpArrow') { -1 } else { 1 }
+                $View.SatelliteOffset = [math]::Max(0, [int]$View.SatelliteOffset + $delta)
+                $View.Dirty = $true
+                continue
+            }
             if ($View.HandoverVisible) {
                 $delta = if ($key.Key -eq 'UpArrow') { -1 } else { 1 }
                 $View.HandoverOffset = [math]::Max(0, [int]$View.HandoverOffset + $delta)
@@ -84,7 +99,7 @@ function Invoke-TuiLoop($Session, [hashtable]$View, $Sampler) {
         if (-not $view.Done -and -not $view.Fetching -and
             ($view.RefreshRequested -or (-not $view.Paused -and (Get-Date) -ge $nextSample))) {
             $view.RefreshRequested = $false
-            Start-MonitorSample $sampler $Session.Modem $Session.Summary.At $Session.GpsReceiver
+            Start-MonitorSample $sampler $Session.Modem $Session.Summary.At $Session.GpsReceiver $Session.NmeaReceiver
             $view.Fetching = $true
             $view.Dirty = $true
         }
@@ -102,7 +117,7 @@ function Invoke-TuiMonitor($Session) {
         Paused = $false; Fetching = $false; Done = $false; Quit = $false; Unicode = $true
         RefreshRequested = $true; ResetRequested = $false; LastWidth = 0; LastHeight = 0; ChartVisible = New-ChartVisibility
         ChartRows = $script:ChartRowsDefault; Dirty = $true
-        HandoverVisible = $false; HandoverOffset = 0
+        HandoverVisible = $false; HandoverOffset = 0; SatelliteVisible = $false; SatelliteOffset = 0
     }
     $savedCursor = [Console]::CursorVisible
     $savedCtrlC = [Console]::TreatControlCAsInput
