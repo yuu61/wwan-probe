@@ -70,25 +70,25 @@ function Get-Sparkline([double[]]$Values, [double]$Min, [double]$Max, [int]$Widt
     return $sb.ToString()
 }
 
-# 2-row block sparkline, 16 levels. Each column stacks U+2581..U+2588 (1/8..8/8)
-# in the bottom row, then in the top row. Returns @(TopRow, BottomRow).
-function Get-BlockSparkline([double[]]$Values, [double]$Min, [double]$Max, [int]$Width) {
-    if ($Width -le 0) { return @("", "") }
+# Multi-row block sparkline, 8 x $Rows levels. Each column stacks U+2581..U+2588
+# (1/8..8/8) from the bottom row upward. Returns $Rows strings, top row first.
+function Get-BlockSparkline([double[]]$Values, [double]$Min, [double]$Max, [int]$Width, [int]$Rows = 2) {
+    $Rows = [math]::Max(1, $Rows)
+    $builders = @(for ($r = 0; $r -lt $Rows; $r++) { New-Object System.Text.StringBuilder })   # bottom row first
+    if ($Width -le 0) { return @($builders | ForEach-Object { "" }) }
     if ($null -eq $Values) { $Values = @() }
     $count = [math]::Min($Values.Count, $Width)
-    $top = New-Object System.Text.StringBuilder
-    $bottom = New-Object System.Text.StringBuilder
-    [void]$top.Append(' ', $Width - $count)
-    [void]$bottom.Append(' ', $Width - $count)
+    foreach ($b in $builders) { [void]$b.Append(' ', $Width - $count) }
     for ($i = $Values.Count - $count; $i -lt $Values.Count; $i++) {
-        if ([double]::IsNaN($Values[$i])) { [void]$top.Append(' '); [void]$bottom.Append(' '); continue }
-        $eighths = (Get-SparkLevel -Value $Values[$i] -Min $Min -Max $Max -Levels 16) + 1          # 1..16
-        $low = [math]::Min(8, $eighths)
-        $high = $eighths - $low
-        [void]$bottom.Append([char](0x2580 + $low))
-        if ($high -gt 0) { [void]$top.Append([char](0x2580 + $high)) } else { [void]$top.Append(' ') }
+        if ([double]::IsNaN($Values[$i])) { foreach ($b in $builders) { [void]$b.Append(' ') }; continue }
+        $eighths = (Get-SparkLevel -Value $Values[$i] -Min $Min -Max $Max -Levels (8 * $Rows)) + 1   # 1..8*Rows
+        for ($r = 0; $r -lt $Rows; $r++) {
+            $fill = [math]::Max(0, [math]::Min(8, $eighths - 8 * $r))
+            if ($fill -gt 0) { [void]$builders[$r].Append([char](0x2580 + $fill)) } else { [void]$builders[$r].Append(' ') }
+        }
     }
-    return @($top.ToString(), $bottom.ToString())
+    [array]::Reverse($builders)
+    return @($builders | ForEach-Object { $_.ToString() })
 }
 
 function Get-QualityColor([string]$Quality) {

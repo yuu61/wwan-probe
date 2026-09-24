@@ -1,6 +1,7 @@
 # Presentation: interactive full-screen TUI loop.
 # Keys: q / Esc / Ctrl+C = quit, p = pause/resume, r = refresh now,
-#       1-6 = show/hide one history chart, g = show/hide all charts
+#       1-6 = show/hide one history chart, g = show/hide all charts,
+#       Up / Down = taller / shorter history charts
 
 # Renders current state; clears the screen once when the window is resized.
 function Show-TuiScreen($Session, [hashtable]$View) {
@@ -34,7 +35,12 @@ function Wait-TuiInput($Session, [hashtable]$View) {
                 if (-not $View.Paused) { return }
             }
             if ($key.Key -eq 'R') { $View.RefreshRequested = $true; return }
-            # Chart toggles only redraw; they do not take a new sample.
+            # Chart toggles and resizes only redraw; they do not take a new sample.
+            if ($key.Key -eq 'UpArrow' -or $key.Key -eq 'DownArrow') {
+                $rows = Step-ChartHeight $View.ChartRows $(if ($key.Key -eq 'UpArrow') { 1 } else { -1 })
+                if ($rows -ne $View.ChartRows) { $View.ChartRows = $rows; Show-TuiScreen $Session $View }
+                continue
+            }
             $chartKey = if ($key.Key -eq 'G') { 'all' } else { "$($key.KeyChar)" }
             if (Switch-ChartVisibility $View.ChartVisible $chartKey) { Show-TuiScreen $Session $View }
         }
@@ -49,6 +55,7 @@ function Invoke-TuiMonitor($Session) {
     $view = @{
         Paused = $false; Fetching = $false; Done = $false; Quit = $false; Unicode = $true
         RefreshRequested = $true; LastWidth = 0; LastHeight = 0; ChartVisible = New-ChartVisibility
+        ChartRows = $script:ChartRowsDefault
     }
     $savedCursor = [Console]::CursorVisible
     $savedCtrlC = [Console]::TreatControlCAsInput

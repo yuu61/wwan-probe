@@ -1,9 +1,10 @@
 # Presentation: builds one screen (frame) as a list of (Text, Color) lines.
 # Pure with respect to the console: no cursor / write operations here.
 #
-# View state: @{ Paused; Fetching; Done; Quit; Unicode; LastWidth; LastHeight; ChartVisible } (owned by the monitor loop)
+# View state: @{ Paused; Fetching; Done; Quit; Unicode; LastWidth; LastHeight; ChartVisible; ChartRows } (owned by the monitor loop)
 # Unicode = console accepts non-ASCII glyphs (TUI switches to UTF-8; plain output does not).
 # ChartVisible = @{ <chart Key> = $true/$false } (New-ChartVisibility); $null = defaults.
+# ChartRows = sparkline height in rows for Unicode charts ($script:ChartRowsMin..Max); $null = default.
 
 function New-FrameLine {
     # Pure factory (no state change), ShouldProcess is not applicable.
@@ -65,6 +66,16 @@ $script:HistoryCharts = @(
         Scale = @{ Step = 5; MinSpan = 10; Floor = -40; Ceiling = 125 } }
 )
 
+# Unicode chart height in rows (each row adds 8 levels).
+$script:ChartRowsDefault = 2
+$script:ChartRowsMin = 1
+$script:ChartRowsMax = 10
+
+# Returns $Rows + $Delta clamped into [ChartRowsMin, ChartRowsMax].
+function Step-ChartHeight([int]$Rows, [int]$Delta) {
+    return [math]::Max($script:ChartRowsMin, [math]::Min($script:ChartRowsMax, $Rows + $Delta))
+}
+
 # Initial chart visibility: @{ <Key> = $true/$false }.
 function New-ChartVisibility {
     # Pure factory (no state change), ShouldProcess is not applicable.
@@ -101,7 +112,7 @@ function Format-AxisValue([double]$Value) {
 function Add-HistoryChart {
     param(
         [System.Collections.Generic.List[object]]$Lines, $Chart, [double[]]$Values,
-        [int]$Width, [bool]$Unicode
+        [int]$Width, [bool]$Unicode, [int]$Rows = $script:ChartRowsDefault
     )
     $headWidth = 12
     $sparkWidth = [math]::Max(10, $Width - $headWidth - 4)
@@ -111,10 +122,16 @@ function Add-HistoryChart {
     $maxText = Format-AxisValue $range.Max
     $minText = Format-AxisValue $range.Min
     if ($Unicode) {
-        $rows = Get-BlockSparkline $visible $range.Min $range.Max $sparkWidth
-        $Lines.Add((New-FrameLine ((" {0,-5}{1,5} |{2}|" -f $Chart.Label, $maxText, $rows[0])) $Chart.Color))
-        $Lines.Add((New-FrameLine ((" {0,-5}{1,5} |{2}|" -f "", $minText, $rows[1])) $Chart.Color))
-        $scaleText = "{0:0.##} {1}/level" -f (($range.Max - $range.Min) / 16), $Chart.StepUnit
+        $sparkRows = @(Get-BlockSparkline $visible $range.Min $range.Max $sparkWidth $Rows)
+        $last = $sparkRows.Count - 1
+        for ($r = 0; $r -le $last; $r++) {
+            # Axis labels: max on the top row, min on the bottom row (a single row shows only the label).
+            $axis = if ($last -eq 0) { "" } elseif ($r -eq 0) { $maxText } elseif ($r -eq $last) { $minText } else { "" }
+            $label = if ($r -eq 0) { $Chart.Label } else { "" }
+            $Lines.Add((New-FrameLine ((" {0,-5}{1,5} |{2}|" -f $label, $axis, $sparkRows[$r])) $Chart.Color))
+        }
+        $scaleText = "{0:0.##} {1}/level" -f (($range.Max - $range.Min) / (8 * $sparkRows.Count)), $Chart.StepUnit
+        if ($last -eq 0) { $scaleText = "scale {0}..{1} {2}, {3}" -f $minText, $maxText, $Chart.Unit, $scaleText }
     }
     else {
         $Lines.Add((New-FrameLine ((" {0,-10} |{1}|" -f $Chart.Label, (Get-Sparkline $visible $range.Min $range.Max $sparkWidth))) $Chart.Color))
@@ -132,13 +149,14 @@ function Add-HistorySection {
     param([System.Collections.Generic.List[object]]$Lines, $Session, [hashtable]$View, [int]$Width)
 
     $visibility = if ($View.ChartVisible) { $View.ChartVisible } else { New-ChartVisibility }
+    $chartRows = if ($View.ChartRows) { $View.ChartRows } else { $script:ChartRowsDefault }
     $shown = @($script:HistoryCharts | Where-Object { $visibility[$_.Key] })
     $hidden = @($script:HistoryCharts | Where-Object { -not $visibility[$_.Key] })
     $title = "History (primary cell)"
     if ($hidden.Count -gt 0) { $title += "  hidden: " + (($hidden | ForEach-Object { "$($_.Key) $($_.Label)" }) -join ", ") }
     $Lines.Add((New-FrameLine (Get-SectionRule $title $Width) "DarkCyan"))
     foreach ($chart in $shown) {
-        Add-HistoryChart -Lines $Lines -Chart $chart -Values $Session.History[$chart.History].ToArray() -Width $Width -Unicode $View.Unicode
+        Add-HistoryChart -Lines $Lines -Chart $chart -Values $Session.History[$chart.History].ToArray() -Width $Width -Unicode $View.Unicode -Rows $chartRows
     }
 }
 
@@ -239,7 +257,7 @@ function Get-MonitorFrame {
 
     # Footer is returned separately so it can be pinned to the bottom row.
     $csvStr = if ($config.CsvPath) { "  CSV: $($config.CsvPath)" } else { "" }
-    $footer = New-FrameLine " [q] Quit  [p] Pause  [r] Refresh  [1-6] Chart  [g] All charts   Interval: $($config.Interval)s$csvStr" "Black"
+    $footer = New-FrameLine " [q] Quit  [p] Pause  [r] Refresh  [1-6] Chart  [g] All charts  [Up/Down] Chart rows   Interval: $($config.Interval)s$csvStr" "Black"
 
     return [pscustomobject]@{ Body = $lines; Footer = $footer }
 }
