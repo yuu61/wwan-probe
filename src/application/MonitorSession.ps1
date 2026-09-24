@@ -22,8 +22,13 @@ function Initialize-MonitorSession($Modem, $Config, [int]$HistoryMax = 600) {
 
 # Takes one sample and updates the session (history, CSV).
 function Invoke-MonitorSample($Session) {
+    Add-MonitorSnapshot $Session (Get-LteSnapshot $Session.Modem)
+}
+
+# Commits a completed sample on the UI thread, so rendering never sees partial history.
+function Add-MonitorSnapshot($Session, $Snapshot) {
     $Session.Iteration++
-    $Session.Snapshot = Get-LteSnapshot $Session.Modem
+    $Session.Snapshot = $Snapshot
     Add-SignalHistory -Session $Session -Snapshot $Session.Snapshot
     Add-DowngradeLog -Session $Session -Snapshot $Session.Snapshot
     if ($Session.Config.CsvPath) { Add-SnapshotLog $Session.Config.CsvPath $Session.Snapshot }

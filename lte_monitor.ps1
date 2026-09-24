@@ -34,6 +34,7 @@ $sources = @(
     'application\Snapshot.ps1'
     'application\SnapshotLog.ps1'
     'application\MonitorSession.ps1'
+    'application\MonitorSampler.ps1'
     'presentation\Gauge.ps1'
     'presentation\Frame.ps1'
     'presentation\ConsoleRenderer.ps1'

@@ -13,6 +13,14 @@ function Import-WinRtProjection([string]$LibDir) {
 # Helper: Await WinRT async (IAsyncOperation<T>)
 function Wait-WinRtAsync($AsyncOp, [int]$TimeoutMs = 10000) {
     $task = [System.WindowsRuntimeSystemExtensions]::AsTask($AsyncOp)
-    if (-not $task.Wait($TimeoutMs)) { throw "WinRT async operation timed out (${TimeoutMs}ms)" }
+    # Short waits let PowerShell stop the sampling runspace promptly on quit.
+    $timer = [Diagnostics.Stopwatch]::StartNew()
+    while (-not $task.IsCompleted) {
+        $remaining = $TimeoutMs - $timer.ElapsedMilliseconds
+        if ($remaining -le 0) { throw "WinRT async operation timed out (${TimeoutMs}ms)" }
+        $null = $task.Wait([int][math]::Min(50, $remaining))
+    }
+    # Preserve exception propagation even when the task completed before the loop.
+    $null = $task.Wait(0)
     return $task.Result
 }
