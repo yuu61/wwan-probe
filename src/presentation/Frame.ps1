@@ -87,11 +87,12 @@ function Get-MonitorFrame {
             $lines.Add((New-FrameLine " $($c.Band) | EARFCN:$($c.Earfcn) | PCI:$($c.Pci) | CellID:$($c.CellId) | TAC:$($c.Tac) | TA:$($c.Ta) | MNC:$($c.Provider)"))
         }
 
-        # RSRP history (primary serving cell)
-        $rsrp = $Session.History.ToArray()
+        # History (primary serving cell), RSRP and RSRQ on the same time axis
+        $rsrp = $Session.RsrpHistory.ToArray()
         if ($rsrp.Count -gt 0) {
             $lines.Add((New-FrameLine (Get-SectionRule "History (primary cell)" $Width) "DarkCyan"))
             Add-HistoryChart -Lines $lines -Label "RSRP" -Values $rsrp -Min -120 -Max -70 -Unit "dBm" -Color "DarkGreen" -Width $Width -Unicode $View.Unicode
+            Add-HistoryChart -Lines $lines -Label "RSRQ" -Values $Session.RsrqHistory.ToArray() -Min -20 -Max -3 -Unit "dB" -Color "DarkYellow" -Width $Width -Unicode $View.Unicode
         }
 
         # Neighbors
