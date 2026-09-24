@@ -1,5 +1,9 @@
 # Hardware-free regression checks: pwsh -NoProfile -File tests/TuiResponsiveness.Tests.ps1
 # Use a real sampling runspace and simulated console input/output.
+# Tests call Assert-* with positional arguments and build in-memory fixtures with New-* helpers.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPositionalParameters', '')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
+param()
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 . (Join-Path $root 'src/Load.ps1')

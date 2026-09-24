@@ -1,5 +1,9 @@
 # Hardware-free checks for adapters and domain rules: pwsh -NoProfile -File tests/Domain.Tests.ps1
 # Fixtures quote the manuals / real output where noted; "synthetic" ones are built from the documented layout.
+# Tests call Assert-* with positional arguments and build in-memory fixtures with New-* helpers.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPositionalParameters', '')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
+param()
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 . (Join-Path $root 'src/Load.ps1')
