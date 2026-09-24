@@ -70,7 +70,7 @@ function Get-LteSnapshot($Modem) {
         # From the AT Tunnel ($null = unavailable; AtError holds the reason when the session failed)
         Neighbors     = $null  # @() = none reported
         TempC         = $null
-        Rssnr         = $null  # raw value, unit undocumented
+        Rssnr         = $null  # dB, assuming 0.5 dB steps (unit undocumented)
         Ca            = $null  # @{ Cells; BandwidthsMHz }
         AtError       = $null
         # 2G/3G downgrade check (Get-DowngradeFinding): @{ Level = Alert/Warning/None; Reasons }

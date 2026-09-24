@@ -162,14 +162,23 @@ OK
 | --- | --- | --- | --- | --- |
 | `AT+MTSM=1` (4.2.4, p.51) | `+MTSM: 52` | `<Report>`=1: 現在温度を 1 回報告。`<Temp>` -40〜125、単位は摂氏 | モデム温度 52℃ (確定)。`<Report>`=6 で BBIC、7 で RF の温度 (未試行) | `Temp` |
 | `AT+XLEC?` (9.1.16, p.172-173) | `+XLEC: 0,2,3,5,BAND_LTE_18,0,0,0,0` | `<n>,<no_of_cells>,[<bandwidth>[,...]]`。`no_of_cells`: 0=LTE 以外、1=PCell のみ、2〜5=SCell あり。`bandwidth`: 0=1.4 / 1=3 / 2=5 / 3=10 / 4=15 / 5=20 MHz, 255=無効 | CA で 2 セル、10 MHz + 20 MHz (確定)。`BAND_LTE_18,0,0,0,0` はマニュアルに記載なし (PCell のバンドと推測) | `CA` |
-| `AT+XCESQ?` (9.1.19, p.177-179) | `+XCESQ: 0,99,99,255,255,19,58,11,255,255,255,255` | `<n>,<rxlev>,<ber>,<rscp>,<ecno>,<rsrq>,<rsrp>,<rssnr>,...`。範囲は rsrq 0-34, rsrp 0-97, **rssnr -100〜100** (255=不明) | rsrq/rsrp は 3GPP インデックス。**rssnr の単位はマニュアルに記載なし** | `RSSNR (raw)` |
+| `AT+XCESQ?` (9.1.19, p.177-179) | `+XCESQ: 0,99,99,255,255,19,58,11,255,255,255,255` | `<n>,<rxlev>,<ber>,<rscp>,<ecno>,<rsrq>,<rsrp>,<rssnr>,...`。範囲は rsrq 0-34, rsrp 0-97, **rssnr -100〜100** (255=不明) | rsrq/rsrp は 3GPP インデックス。**rssnr の単位はマニュアルに記載なし**。0.5 dB 刻みと推定 (11 → 5.5 dB) | `RSSNR` (dB, 推定) |
 | `AT+XACT?` | `+XACT: 4,2,1,1,2,4,5,8,101,...,171` | **マニュアルに記載なし** | ModemManager の実装で確認: 許可 RAT 4 = 3G+4G、優先 2 = 4G、バンドは <100 = UMTS、101〜299 = 100 + LTE バンド (詳細は [downgrade-detection.md](downgrade-detection.md)) | `RAT` / `LTE bands` |
 | `AT+XMCI` (9.1.13, p.167-169) | 5. 参照 | フィールド名のみで、RSRP / RSRQ / RSSNR / PATHLOSS_LTE / CQI の単位の定義はない。例では RSSNR=-24 | RSSNR の単位は未確定 | Neighbors |
 | `AT+XCCINFO?` (9.1.14, p.169-170) | `+XCCINFO: 0,440,51,"0558E901",3,118,"FFFF",1,"FF","8AA8",0,...` | `<mode>,<mcc>,<mnc>,<ci>,<rat>,<band_info>,<lac>,<area_type>,<rac>,<tac>,...`。個別の値の定義はなし。例: `rat`=3, `band_info`=103 | `band_info` は 100 + LTE バンド番号と推測 (118=B18、実機の EARFCN 5900=B18 と一致) | なし |
 | `AT+CSQ` | `+CSQ: 15,4` / `+CSQ: 16,5` / `+CSQ: 0,2` | 3GPP TS 27.007 (-113 + 2×rssi dBm) | **RSSI ではなく RSRP の読み替え**。同時刻の RSRP (XCESQ) が -83 / -81 / -115 dBm のとき、CSQ 換算は -83 / -81 / -113 dBm (下限張り付き) で一致 | なし (新しい情報がないため) |
 
 - rssnr (SINR) は XCESQ で -100〜100 の範囲とされるが、単位 (dB / 0.5 dB など) は記載がない。
-  そのため「単位不明の生値」として `(raw)` を付けて表示している。
+  **0.5 dB 刻みと推定し、生値 ÷ 2 を dB として表示している** (未確定)。根拠:
+  - ModemManager の XMM プラグイン (`src/plugins/xmm/mm-modem-helpers-xmm.c` の `rssnr_level_to_rssnr()`) が
+    -100〜100 の値を `/ 2.0` して dB として扱っている (単位のコメントはなく、一次資料ではない)。
+  - 範囲 -100〜100 は 1 dB 刻みだと ±100 dB で SINR として広すぎる。0.5 dB 刻みなら ±50 dB。
+  - マニュアル XMCI の例 RSSNR=-24 は、1 dB 刻みだと LTE が接続を保てる下限 (-6〜-10 dB 程度) を大きく下回る。
+  - 0.1 dB 刻みは RSRQ と矛盾する: 実測 (rssnr 11 / RSRQ -10.5〜-10 dB, rssnr 19 / RSRQ -10〜-9.5 dB) で
+    SINR 1.1 / 1.9 dB とすると、2 ポート時の RSRQ 上限 `1 / (4 + 12/SINR)` が約 -11 dB になり実測を説明できない。
+    1 dB 刻みと 0.5 dB 刻みはどちらも負荷 40〜70% 程度で説明でき、実測からは区別できない。
+  - 確定させるには、弱電界 (RSRP -110 dBm 以下) で接続を保ったまま生値が -20 前後になるかを確認する
+    (1 dB 刻みでは通信できない値になる)。
 - RSSI は CSQ からは得られない (上表)。`netsh mbn show interfaces` の `RSSI / RSCP` (MBIM の信号状態) は
   同時刻に `6 (-101 dBm)` で、CSQ (`0`) とも異なる。
 - `AT+GTCCINFO?`, `AT+GTCAINFO?`, `AT+XTEMP=?`, `AT+GTSENRDTEMP=?`, `AT+XTAMR=?`,

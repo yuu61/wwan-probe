@@ -20,12 +20,13 @@ function ConvertFrom-MtsmResponse([string]$Response) {
 
 # AT+XCESQ? -> "+XCESQ: <n>,<rxlev>,<ber>,<rscp>,<ecno>,<rsrq>,<rsrp>,<rssnr>,..."
 # rssnr range is -100..100 (255 = unknown); the manual does not state its unit.
+# Assumed 0.5 dB steps (as ModemManager's XMM plugin does), so the result is in dB.
 function ConvertFrom-XcesqResponse([string]$Response) {
     $f = Get-AtResponseField $Response 'XCESQ'
     if ($null -eq $f -or $f.Count -lt 8) { return $null }
     $rssnr = 0
     if (-not [int]::TryParse($f[7], [ref]$rssnr) -or $rssnr -lt -100 -or $rssnr -gt 100) { return $null }
-    return $rssnr
+    return $rssnr / 2.0
 }
 
 # AT+XLEC? -> "+XLEC: <n>,<no_of_cells>,<bandwidth>[,<bandwidth>...][,<undocumented>...]"

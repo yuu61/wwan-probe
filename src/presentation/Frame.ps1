@@ -125,7 +125,7 @@ function Get-MonitorFrame {
         $lines.Add((New-FrameLine " $($snapshot.ProviderName) ($($snapshot.ProviderId)) | $($snapshot.DataClass) | APN: $($snapshot.Apn)"))
         $lines.Add((New-FrameLine (" BW: {0} Mbps   RX: {1} KB/s   TX: {2} KB/s   Updated: {3}" -f $snapshot.BwMbps, $snapshot.RxKB, $snapshot.TxKB, $snapshot.Timestamp)))
         $lines.Add((New-FrameLine (" Temp: {0}   RSSNR: {1}   CA: {2}" -f
-            (Format-OptionalValue $snapshot.TempC "{0} C"), (Format-OptionalValue $snapshot.Rssnr "{0} (raw)"),
+            (Format-OptionalValue $snapshot.TempC "{0} C"), (Format-OptionalValue $snapshot.Rssnr "{0:0.0} dB"),
             (Format-CarrierAggregation $snapshot.Ca))))
 
         # Serving cells
