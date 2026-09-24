@@ -155,6 +155,8 @@ OK
 - CSV (`-CsvPath`) には温度・RSSNR・CA (セル数・帯域幅・SCell) も出力する (列は `src/application/SnapshotLog.ps1` 参照)。近隣セルは出力していない。
 - History のグラフは RSRP / RSRQ / SNR / RX / TX / Temp。TUI では `1`〜`6` で個別に、`g` で全部をまとめて表示・非表示を切り替える。
   初期状態は RSRP / RSRQ / SNR のみ表示 (画面の高さを節約するため)。取得できなかった値はグラフ上で空白になる。
+  RX / TX は対数スケール。上限・下限は表示中の正の値を挟む 10 の累乗で自動調整 (最低 1 桁幅、下限は 100 B/s 以上。計測の分解能は 0.1 KB/s = 102.4 B/s)。0 と下限未満は最下段に描く。
+  RX / TX の値 (Network 行、グラフの軸・統計) は B/s に換算し SI 接頭辞 (k / M / G、1000 倍ごと) で表示する。CSV の `RX_KBps` / `TX_KBps` は従来どおり KB/s (1 KB = 1024 B)。
 
 ## 6. AT Tunnel で取れるその他の値 (マニュアル V3.2.3 で確認)
 
