@@ -66,7 +66,8 @@ Write-Output 'PASS: errors, missing cells and invalid identities reset the basel
 # into the primary-cell identity used for handover detection.
 function Get-ModemCellsInfo { return $script:cells }
 function Get-AdapterTraffic { return @{ BwMbps = 0; RxKB = 0; TxKB = 0 } }
-function Get-AtStatus { return @{ XmciCells = @(); Neighbors = @(); TempC = $null; Rssnr = $null; Ca = $null } }
+function Get-AtStatus { return $script:atStatus }
+$script:atStatus = @{ Cells = @(); Neighbors = @(); TempC = $null; Rssnr = $null; Ca = $null }
 $primary = [pscustomobject]@{
     ReferenceSignalReceivedPowerInDBm = 255; ReferenceSignalReceivedQualityInDBm = 255
     ChannelNumber = 100; PhysicalCellId = 10; CellId = 100; TrackingAreaCode = 20
@@ -90,6 +91,26 @@ $primary.CellId = 400
 Add-HandoverLog $log (Get-LteSnapshot $modem)
 Assert-True ($log.Count -eq 1) 'Primary change with missing RSRP was not detected.'
 Write-Output 'PASS: snapshot identity is independent of RSRP and CA secondary cells'
+
+# A modem following the MBIM spec reports dBm / dB, and may list neighbors in WinRT.
+$specCell = [pscustomobject]@{
+    ReferenceSignalReceivedPowerInDBm = -97; ReferenceSignalReceivedQualityInDBm = -11
+    ChannelNumber = 9460; PhysicalCellId = 5; CellId = 500; TrackingAreaCode = 30
+    TimingAdvanceInBitPeriods = 0; ProviderId = '44020'
+}
+$winRtNeighbor = [pscustomobject]@{
+    ReferenceSignalReceivedPowerInDBm = -105; ReferenceSignalReceivedQualityInDBm = -14
+    ChannelNumber = 1500; PhysicalCellId = 77; CellId = 4294967295; TrackingAreaCode = 30; ProviderId = '44020'
+}
+$script:cells = @{ ServingCellsLte = @($specCell); NeighboringCellsLte = @($winRtNeighbor) }
+$script:atStatus = @{ Cells = $null; Neighbors = $null; TempC = $null; Rssnr = $null; Ca = $null }
+$snapshot = Get-LteSnapshot $modem
+Assert-True ($snapshot.Serving.Count -eq 1 -and $snapshot.Serving[0].RsrpDbm -eq -97 -and $snapshot.Serving[0].RsrqDb -eq -11) 'Spec dBm serving cell was dropped.'
+Assert-True ($snapshot.Serving[0].Band -eq 'B28/700' -and $snapshot.PrimaryCell.RsrpDbm -eq -97) 'Spec serving cell identity is wrong.'
+Assert-True ($snapshot.Neighbors.Count -eq 1 -and $snapshot.Neighbors[0].RsrpDbm -eq -105 -and $snapshot.Neighbors[0].Band -eq 'B3/1800') 'WinRT neighbor fallback failed.'
+$script:atStatus = @{ Cells = @(); Neighbors = @(); TempC = $null; Rssnr = $null; Ca = $null }
+Assert-True ((Get-LteSnapshot $modem).Neighbors.Count -eq 0) 'An AT neighbor list (even empty) must take precedence.'
+Write-Output 'PASS: MBIM-spec signal units and WinRT neighbor fallback'
 
 # Commit samples through the same use case as both monitor loops.
 function Get-ModemSummary { return @{ Model = 'Test'; RatConfig = $null } }
@@ -126,3 +147,21 @@ $session.HandoverLog = New-HandoverLog
 $frame = Get-MonitorFrame $session $view 80
 Assert-True (($frame.Body.Text -join "`n") -match 'no LTE cell changes') 'Empty history is not explained.'
 Write-Output 'PASS: sample integration, compact frame, details, keyboard navigation, page bounds and empty history'
+
+# Device header for a non-Intel modem: AT line, RAT without a preferred RAT, NR bands, AUTO warning.
+$view.HandoverVisible = $false
+$session.Summary = [pscustomobject]@{
+    Model = 'RM520N-GL'; Firmware = 'x'; Imei = ''; SimIccId = ''; SimSpn = ''; RadioState = 'On'; DataClass = 'Lte'
+    At = [pscustomobject]@{ Channel = [pscustomobject]@{ Name = 'Quectel QDU' }; Profile = [pscustomobject]@{ Name = 'Quectel (+Q commands)' }; Error = $null }
+    RatConfig = [pscustomobject]@{ Allowed = '3G+4G+5G (AUTO)'; Preferred = $null; GsmBands = @(); UmtsBands = @(1, 8); LteBands = @(1, 3); NrBands = @(78) }
+}
+$text = (Get-MonitorFrame $session $view 80).Body.Text -join "`n"
+Assert-True ($text -match 'AT: Quectel QDU / Quectel \(\+Q commands\)') 'AT channel/profile line missing.'
+Assert-True ($text -match 'RAT: 3G\+4G\+5G \(AUTO\)   2G/3G bands: B1 B8   \[2G/3G enabled' -and $text -notmatch 'prefer') 'AUTO must warn and omit an unknown preferred RAT.'
+Assert-True ($text -match 'LTE bands: B1 B3   NR bands: n78') 'NR bands missing.'
+$session.Summary.At = [pscustomobject]@{ Channel = $null; Profile = $null; Error = 'no AT channel (4 MBIM services tried)' }
+$session.Summary.RatConfig = $null
+$frame = Get-MonitorFrame $session $view 80
+Assert-True (($frame.Body.Text -join "`n") -match 'AT: unavailable \(no AT channel \(4 MBIM services tried\)\)') 'Missing AT reason.'
+Assert-True (@($frame.Body.Text | Where-Object { $_.Length -gt 80 }).Count -eq 0) 'Header lines must fit 80 columns.'
+Write-Output 'PASS: device header for other vendors and missing AT'

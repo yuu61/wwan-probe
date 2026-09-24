@@ -9,6 +9,7 @@
 - AT ポート (COM) は ModemControl ドライバに占有されていて開けない (2.)。
 - **MBIM の Intel AT Tunnel サービス経由で `AT+XMCI` を送ると近隣セルを取得できる** (5.)。
   COM ポートもドライバの無効化も不要。TUI の Neighbors セクションはこの経路で実装している。
+- L860-GL 以外のモデム (他ベンダーの AT 経路・コマンド、WinRT の近隣セル) については [modem-support.md](modem-support.md) を参照。
 
 ## 1. WinRT API は近隣セルを返さない
 
@@ -74,9 +75,26 @@ ModemControl Device を無効化すれば COM6 は解放されるはずだが、
 - 近隣セル一覧 (`LTEMrlOffset`) は「返す近隣セルがなければ NULL でよい」とされ、返すことは必須ではない。
 - 仕様上の LTE RSRP は **-140〜-44 (1 dBm 単位)**、RSRQ は -20〜-3。
   このモデムはサービングセルの RSRP に `61` のような **3GPP 36.133 のインデックス値**を返しており、仕様と異なる。
-  `Convert-RsrpIndex` / `Convert-RsrqIndex` はこのモデム実機の挙動に合わせたもの。
+  WinRT の値は `ConvertFrom-WinRtRsrp` / `ConvertFrom-WinRtRsrq` で変換する。仕様どおりの dBm / dB とこのモデムのインデックス値の
+  両方を受け付ける (範囲が重ならないため区別できる)。
 - CID 11 を device service として直接送る案は、`BASIC_CONNECT_EXTENSIONS` の
   `OpenCommandSession()` が `0x80070015` (ERROR_NOT_READY) で失敗するため不可 (OS が占有していると見られる)。
+
+### 応答が返らないクエリ (実測 2026-09-24)
+
+- `GetCellsInfoAsync()` は通常 10〜60 ms で返る (約 800 回で最大 59 ms)。
+- まれに応答が返らない。以前のモニター実行では約 400 回中 6 回 (WWAN のイベントログの AT 応答の間隔から推定)。
+  検証では AT なし 400 回で 0 回、AT あり 400 回で 1 回だった。AT のセッションが関係するかは、この回数では判断できない。
+- 応答が返らなかった 1 回は、10 秒以内に返らず、約 60 秒後に Windows 側で失敗扱いになった (失敗の理由は記録していない)。
+  遅れて返るのではなく、応答がないまま終わる。
+- その間も、新しく送ったクエリは 10〜25 ms で返り、AT も正常だった。タイムアウト直後の取得は 7 回中 7 回成功している。
+- このため `Get-ModemCellsInfo` は、2 秒たっても返らないクエリをもう 1 回送り、2 つのうち先に返った結果を使う
+  (`Wait-TaskResult`)。全体の上限は従来どおり 10 秒。
+  先に送ったクエリは取り消さない (L860-GL では、残したままでも後続のクエリは妨げられなかった)。
+- 応答に 2 秒以上かかるモデムでも最初の応答を 10 秒まで待つが、その場合は毎回クエリが 1 つ余分に送られる。
+  クエリを 1 つずつしか処理しないモデムでは次の取得が遅れる可能性がある。L860-GL 以外では確認していない。
+- 実機 (L860-GL) で確認したのは、通常の取得と、再送を強制して 2 つのクエリを同時に出した場合 (20 回ずつ、すべて正常)。
+  本当に応答が返らなかったときに再送で回復する動作は、発生がまれなため実機ではまだ確認できていない (テストは模擬のタスクで確認)。
 
 ## 4. MBIM device service の確認結果
 
@@ -140,18 +158,21 @@ OK
 
 | ファイル | 内容 |
 | --- | --- |
-| `src/infrastructure/Modem.ps1` | `Invoke-ModemAtCommand`: 1 つの AT Tunnel セッションで複数コマンドを順に送り、`@{ コマンド = 応答文字列 }` を返す |
-| `src/domain/CellMeasurement.ps1` | `ConvertFrom-XmciResponse`: `+XMCI:` 行を LTE セルのオブジェクトに変換 |
+| `src/infrastructure/Modem.ps1` | `Find-ModemAtChannel`: 起動時に AT の経路 (Intel AT Tunnel など) を探す。`Invoke-ModemAtCommand`: 1 つのセッションで複数コマンドを順に送り、`@{ コマンド = 応答文字列 }` を返す |
+| `src/domain/CellMeasurement.ps1` | `ConvertFrom-XmciResponse`: `+XMCI:` 行をセルのオブジェクトに変換 |
 | `src/domain/ModemStatus.ps1` | `+MTSM` / `+XCESQ` / `+XLEC` / `+XACT` の応答パーサー |
-| `src/application/Snapshot.ps1` | `Get-AtStatus`: 毎回の更新で近隣セル・温度・RSSNR・CA を取得。`Get-ModemSummary`: 有効 LTE バンドを起動時に 1 回取得 |
+| `src/domain/AtProfile.ps1` | ベンダー別のコマンドセット (Intel は `AT+XMCI=?` の応答で判定) と、応答から近隣セル・温度・RSSNR・CA へのまとめ |
+| `src/application/Snapshot.ps1` | `Initialize-ModemAt`: 起動時に経路とコマンドセットを判定。`Get-AtStatus`: 毎回の更新で近隣セル・温度・RSSNR・CA を取得。`Get-ModemSummary`: 有効 LTE バンドを起動時に 1 回取得 |
 | `src/presentation/Frame.ps1` | `LTE bands` 行、`Temp / RSSNR / CA` 行、Neighbors セクションの表示。RSSNR (`SNR`) と温度 (`Temp`) は History にもグラフ表示 |
 
 - PowerShell は CsWinRT の `IBuffer` を引数・戻り値として正しく扱えない
   (`WinRT.IInspectable` から `IBuffer` への変換で失敗する) ため、
   `SendSetCommandAsync` / `ResponseData` / `ToArray` はリフレクション経由で呼んでいる。
 - 1 コマンドのタイムアウトは 3 秒。タイムアウトしたらそのセッションの残りのコマンドは送らず `$null` にする。
+  プロセスが AT Tunnel を使い始めた直後に応答が 1 回返らないことがあったため、起動時の判定だけはタイムアウト時に 1 回再送する。
   毎回の更新では `AT+MTSM=1`, `AT+XCESQ?`, `AT+XLEC?`, `AT+XMCI=0` の順に送る (XMCI を最後にして、詰まっても他の値は残す)。
 - 取得できなかった値は `n/a`、近隣セルは `(unavailable: <理由>)` と表示し、サービングセルの表示は継続する。
+  AT で近隣セルが取れなかったときは WinRT の `NeighboringCellsLte` を使う (L860-GL では常に 0 件なので `unavailable` のまま)。
 - CSV (`-CsvPath`) には温度・RSSNR・CA (セル数・帯域幅・SCell) も出力する (列は `src/application/SnapshotLog.ps1` 参照)。近隣セルは出力していない。
 - History のグラフは RSRP / RSRQ / SNR / RX / TX / Temp。TUI では `1`〜`6` で個別に、`g` で全部をまとめて表示・非表示を切り替える。
   初期状態は RSRP / RSRQ / SNR のみ表示 (画面の高さを節約するため)。取得できなかった値はグラフ上で空白になる。
@@ -196,5 +217,6 @@ OK
 Import-WinRtProjection (Join-Path (Get-Location) 'lib')
 $m = Get-DefaultModem
 @((Get-ModemCellsInfo $m.CurrentNetwork).NeighboringCellsLte).Count  # WinRT (現状 0)
-Invoke-ModemAtCommand $m @('AT+XMCI=0', 'AT+MTSM=1', 'AT+XCESQ?', 'AT+XLEC?', 'AT+XACT?')  # AT Tunnel
+$ch = Find-ModemAtChannel $m $null  # Intel AT Tunnel
+Invoke-ModemAtCommand $m $ch @('AT+XMCI=0', 'AT+MTSM=1', 'AT+XCESQ?', 'AT+XLEC?', 'AT+XACT?')
 ```

@@ -21,8 +21,9 @@ function Get-LegacyDataClass([string]$DataClass) {
 #   Reasons = human readable evidence
 # $RegisteredDataClass: WinRT RegisteredDataClass string
 # $LegacyServingCount:  WinRT GSM/UMTS/CDMA serving cells
-# $XmciCells:           ConvertFrom-XmciResponse output ($null when unavailable)
-function Get-DowngradeFinding([string]$RegisteredDataClass, [int]$LegacyServingCount, $XmciCells) {
+# $AtCells:             common AT cells (AtProfile.ps1, e.g. from AT+XMCI) ($null when unavailable)
+# $AtSource:            label of the AT cell list shown in the reasons (e.g. 'XMCI')
+function Get-DowngradeFinding([string]$RegisteredDataClass, [int]$LegacyServingCount, $AtCells, [string]$AtSource = 'AT') {
     $alert = @()
     $warning = @()
 
@@ -34,9 +35,10 @@ function Get-DowngradeFinding([string]$RegisteredDataClass, [int]$LegacyServingC
     if ($LegacyServingCount -gt 0) {
         $alert += "$LegacyServingCount 2G/3G serving cell(s) (WinRT)"
     }
-    foreach ($cell in @($XmciCells | Where-Object { $_ -and $_.Rat -ne 'LTE' })) {
+    # LTE / NR cells are not legacy (CDMA is not reported by any AT profile).
+    foreach ($cell in @($AtCells | Where-Object { $_ -and $_.Rat -in 'GSM', 'UMTS' })) {
         $text = "$($cell.Rat) $($cell.Role.ToLower()) ch:$(if ($null -eq $cell.Channel) { '?' } else { $cell.Channel })"
-        if ($cell.Role -eq 'Serving') { $alert += "$text (XMCI)" } else { $warning += "$text (XMCI)" }
+        if ($cell.Role -eq 'Serving') { $alert += "$text ($AtSource)" } else { $warning += "$text ($AtSource)" }
     }
 
     $level = if ($alert.Count -gt 0) { 'Alert' } elseif ($warning.Count -gt 0) { 'Warning' } else { 'None' }

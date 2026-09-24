@@ -1,6 +1,6 @@
 # Application: monitoring session use case (sample -> history -> CSV), UI independent.
 #
-# Config:  [pscustomobject]@{ Interval = <sec>; Count = <n, 0 = infinite>; CsvPath = <path or ""> }
+# Config:  [pscustomobject]@{ Interval = <sec>; Count = <n, 0 = infinite>; CsvPath = <path or "">; AtPort = <"COMx" or ""> }
 # Session: Modem, Config, Summary, Snapshot (latest), Iteration,
 #          History (ordered name -> List[double], all series the same length, NaN = missing;
 #          see Add-SignalHistory for the series),
@@ -11,7 +11,7 @@ function Initialize-MonitorSession($Modem, $Config, [int]$HistoryMax = 600) {
     return [pscustomobject]@{
         Modem        = $Modem
         Config       = $Config
-        Summary      = Get-ModemSummary $Modem
+        Summary      = Get-ModemSummary $Modem $Config.AtPort
         Snapshot     = $null
         History      = New-SignalHistory
         HandoverLog  = New-HandoverLog
@@ -23,7 +23,7 @@ function Initialize-MonitorSession($Modem, $Config, [int]$HistoryMax = 600) {
 
 # Takes one sample and updates the session (history, CSV).
 function Invoke-MonitorSample($Session) {
-    Add-MonitorSnapshot $Session (Get-LteSnapshot $Session.Modem)
+    Add-MonitorSnapshot $Session (Get-LteSnapshot $Session.Modem $Session.Summary.At)
 }
 
 # Commits a completed sample on the UI thread, so rendering never sees partial history.

@@ -1,14 +1,16 @@
 # wwan-probe
 
-Fibocom L860-GL 向けの LTE 信号監視ツール (TUI) です。
+Windows のモバイルブロードバンド (WWAN) モデム向けの LTE 信号監視ツール (TUI) です。
 Windows の PowerShell 7.4 以降で動作します。
+実機で確認しているのは Fibocom L860-GL だけです。Quectel や Fibocom FM350 などは仕様上の対応です ([`docs/modem-support.md`](docs/modem-support.md) 参照)。
 
 ## 機能
 
 - **リアルタイム監視**: RSRP, RSRQ, SNR, 送受信レート, モデム温度の履歴グラフ表示
 - **詳細情報の取得**: CA (キャリアアグリゲーション) 情報、利用可能な LTE バンド、RAT 情報の取得
-- **2G/3G ダウングレード検知**: 偽基地局対策として、国内では利用されない 2G/3G へのダウングレードを検知して警告 (詳細は `docs/downgrade-detection.md` 参照)
-- **近隣セル情報の表示**: MBIM の Intel AT Tunnel (`AT+XMCI`) 経由で近隣セル (Neighbor cells) の情報を取得・表示 (詳細は `docs/neighbor-cells.md` 参照)
+- **2G/3G ダウングレード検知**: 偽基地局対策として、国内では利用されない 2G/3G へのダウングレードを検知して警告 (詳細は [`docs/downgrade-detection.md`](docs/downgrade-detection.md) 参照)
+- **近隣セル情報の表示**: モデムの AT コマンド (L860-GL は MBIM の Intel AT Tunnel 経由の `AT+XMCI`) で近隣セル (Neighbor cells) の情報を取得・表示。AT で取れない場合は WinRT が報告する近隣セルを使用 (詳細は [`docs/neighbor-cells.md`](docs/neighbor-cells.md) 参照)
+- **複数ベンダーの AT コマンド**: 起動時に AT の経路 (Intel / Fibocom / Compal / Quectel の MBIM サービス、または COM ポート) とコマンドセット (Intel `+X`、Quectel `+Q`、Fibocom `+GT`) を自動判定 (詳細は [`docs/modem-support.md`](docs/modem-support.md) 参照)
 - **ハンドオーバー履歴**: LTE 主セルの変更を検出し、時刻と切り替え先の Cell ID・バンド・PCI などを表示
 - **CSV ログ出力**: 取得した情報を CSV ファイルに記録可能
 
@@ -16,7 +18,10 @@ Windows の PowerShell 7.4 以降で動作します。
 
 - **OS**: Windows 10 / 11
 - **PowerShell**: バージョン 7.4 以降 (Windows PowerShell 5.1 では動作しません)
-- **対象モデム**: Fibocom L860-GL (Intel XMM 7560 ベース) などの互換モデム
+- **対象モデム**: Windows が認識する MBIM モデム。温度・SINR・CA・近隣セルなどは AT コマンドに対応したモデムのみ
+  - 実機確認済み: Fibocom L860-GL (Intel XMM 7560)
+  - 仕様上の対応 (未確認): Intel XMM 系、Quectel (RM5xx など `AT+QENG` 対応機)、Fibocom FM350-GL など `AT+GTCCINFO` 対応機
+  - AT が使えないモデムでも、WinRT で取れるサービングセルの情報・履歴・CSV は表示・記録できます
 
 ## セットアップ
 
@@ -33,7 +38,7 @@ PowerShell 7.4+ がインストールされている環境で、初回のみ Win
 以下のスクリプトを実行して TUI モニターを起動します。
 
 ```powershell
-.\lte_monitor.ps1 [-Interval <秒>] [-Count <回数>] [-CsvPath "log.csv"]
+.\lte_monitor.ps1 [-Interval <秒>] [-Count <回数>] [-CsvPath "log.csv"] [-AtPort COM7]
 ```
 
 ### 引数 (オプション)
@@ -41,6 +46,7 @@ PowerShell 7.4+ がインストールされている環境で、初回のみ Win
 - `-Interval`: 測定間隔 (秒)。デフォルトは `0` で、バックトゥバックサンプリング (カウンターの関係で約1秒間隔) を行います。
 - `-Count`: 測定回数。デフォルトは `0` で無限ループします。
 - `-CsvPath`: 指定すると、結果を CSV ファイルにログ出力します。
+- `-AtPort`: AT コマンドを MBIM ではなく指定の COM ポート (例: `COM7`) で送ります。ベンダードライバが AT ポートを公開しているモデム向けです。省略時は MBIM の AT サービスを自動で探します。
 
 ### TUI での操作
 
@@ -83,3 +89,4 @@ CA の副セルの追加・削除、信号強度や TAC だけの変化は数え
 
 - [2G/3G ダウングレード検知](docs/downgrade-detection.md)
 - [近隣セル (Neighbors) の取得方法](docs/neighbor-cells.md)
+- [対応モデム (L860-GL 以外)](docs/modem-support.md)
