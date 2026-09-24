@@ -3,12 +3,32 @@
 function Write-ConsoleLine {
     # TUI needs direct cursor-addressed console writes; Write-Output cannot do this.
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '')]
-    param([string]$Text, [string]$Color, [int]$Width, [string]$BackgroundColor = '')
+    param([string]$Text, [string]$Color, [int]$Width, [string]$BackgroundColor = '', [object[]]$Segments = @())
 
-    if ($Text.Length -gt $Width) { $Text = $Text.Substring(0, $Width) }
     [Console]::ForegroundColor = $Color
     if ($BackgroundColor) { [Console]::BackgroundColor = $BackgroundColor }
-    [Console]::Write($Text.PadRight($Width))
+    if ($Segments.Count -gt 0) {
+        $remaining = $Width
+        foreach ($segment in $Segments) {
+            if ($remaining -le 0) { break }
+            $length = [math]::Min($segment.Text.Length, $remaining)
+            [Console]::ForegroundColor = $segment.Color
+            if ($null -ne $segment.GrayLevel) {
+                $level = $segment.GrayLevel
+                [Console]::Write("`e[38;2;$level;$level;${level}m")
+            }
+            [Console]::Write($segment.Text.Substring(0, $length))
+            # End the RGB override before spaces, the NR suffix or the next line.
+            if ($null -ne $segment.GrayLevel) { [Console]::Write("`e[39m") }
+            $remaining -= $length
+        }
+        [Console]::ForegroundColor = $Color
+        [Console]::Write(' ' * $remaining)
+    }
+    else {
+        if ($Text.Length -gt $Width) { $Text = $Text.Substring(0, $Width) }
+        [Console]::Write($Text.PadRight($Width))
+    }
     [Console]::ResetColor()
 }
 
@@ -29,7 +49,7 @@ function Show-Frame($Frame, [int]$Width, [int]$Height) {
         [Console]::SetCursorPosition(0, $row)
         if ($row -lt $Frame.Body.Count) {
             $line = $Frame.Body[$row]
-            Write-ConsoleLine -Text $line.Text -Color $line.Color -Width $Width
+            Write-ConsoleLine -Text $line.Text -Color $line.Color -Width $Width -Segments $line.Segments
         }
         else {
             Write-ConsoleLine -Text '' -Color 'Gray' -Width $Width
