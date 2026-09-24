@@ -17,6 +17,20 @@ function Get-SectionRule([string]$Title, [int]$Width) {
     return $head + ("-" * [math]::Max(0, $Width - $head.Length))
 }
 
+function Format-OptionalValue($Value, [string]$Format) {
+    if ($null -eq $Value) { return "n/a" }
+    return ($Format -f $Value)
+}
+
+# $Ca: @{ Cells; BandwidthsMHz } from +XLEC
+function Format-CarrierAggregation($Ca) {
+    if ($null -eq $Ca) { return "n/a" }
+    if ($Ca.Cells -eq 0) { return "not on LTE" }
+    $bw = ($Ca.BandwidthsMHz | ForEach-Object { if ($null -eq $_) { "?" } else { "$_" } }) -join "+"
+    $cells = if ($Ca.Cells -eq 1) { "1 cell" } else { "$($Ca.Cells) cells" }
+    return "$cells ($bw MHz)"
+}
+
 # Appends one history chart (sparkline rows + stats line) to $Lines.
 # $Scale: @{ Step; MinSpan; Floor; Ceiling } for Get-AutoScale. The scale is computed
 # from the visible (most recent) samples only; its bounds are shown as the axis labels.
@@ -71,6 +85,8 @@ function Get-MonitorFrame {
     $lines.Add((New-FrameLine " Model: $($summary.Model)   FW: $($summary.Firmware)"))
     $lines.Add((New-FrameLine " IMEI:  $($summary.Imei)   ICCID: $($summary.SimIccId)   SPN: $($summary.SimSpn)"))
     $lines.Add((New-FrameLine " Radio: $($summary.RadioState)   DataClass: $($summary.DataClass)"))
+    $bandText = if ($null -eq $summary.LteBands) { "n/a" } else { ($summary.LteBands | ForEach-Object { "B$_" }) -join " " }
+    $lines.Add((New-FrameLine " LTE bands: $bandText" "DarkGray"))
 
     # Network
     $lines.Add((New-FrameLine (Get-SectionRule "Network" $Width) "DarkCyan"))
@@ -80,6 +96,9 @@ function Get-MonitorFrame {
     else {
         $lines.Add((New-FrameLine " $($snapshot.ProviderName) ($($snapshot.ProviderId)) | $($snapshot.DataClass) | APN: $($snapshot.Apn)"))
         $lines.Add((New-FrameLine (" BW: {0} Mbps   RX: {1} KB/s   TX: {2} KB/s   Updated: {3}" -f $snapshot.BwMbps, $snapshot.RxKB, $snapshot.TxKB, $snapshot.Timestamp)))
+        $lines.Add((New-FrameLine (" Temp: {0}   RSSNR: {1}   CA: {2}" -f
+            (Format-OptionalValue $snapshot.TempC "{0} C"), (Format-OptionalValue $snapshot.Rssnr "{0} (raw)"),
+            (Format-CarrierAggregation $snapshot.Ca))))
 
         # Serving cells
         $lines.Add((New-FrameLine (Get-SectionRule "Serving Cell (LTE)" $Width) "DarkCyan"))
@@ -106,7 +125,8 @@ function Get-MonitorFrame {
         # Neighbors (AT+XMCI via the Intel AT Tunnel service)
         if ($null -eq $snapshot.Neighbors) {
             $lines.Add((New-FrameLine (Get-SectionRule "Neighbors" $Width) "DarkCyan"))
-            $lines.Add((New-FrameLine " (unavailable: $($snapshot.NeighborError))" "DarkGray"))
+            $reason = if ($snapshot.AtError) { $snapshot.AtError } else { "AT+XMCI failed" }
+            $lines.Add((New-FrameLine " (unavailable: $reason)" "DarkGray"))
         }
         else {
             $lines.Add((New-FrameLine (Get-SectionRule "Neighbors ($($snapshot.Neighbors.Count))" $Width) "DarkCyan"))

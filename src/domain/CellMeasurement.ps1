@@ -14,7 +14,7 @@ function ConvertFrom-XmciHex([string]$text) {
     return $value
 }
 
-# Returns LTE cells ([pscustomobject] with Type = Serving/Neighbor) from an AT+XMCI=1 response.
+# Returns LTE cells ([pscustomobject] with Type = Serving/Neighbor) from an AT+XMCI response.
 function ConvertFrom-XmciResponse([string]$Response) {
     $cells = @()
     foreach ($line in ($Response -split "`r?`n")) {

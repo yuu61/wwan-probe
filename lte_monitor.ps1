@@ -24,6 +24,7 @@ $sources = @(
     'domain\Signal.ps1'
     'domain\Band.ps1'
     'domain\CellMeasurement.ps1'
+    'domain\ModemStatus.ps1'
     'infrastructure\WinRt.ps1'
     'infrastructure\Modem.ps1'
     'infrastructure\PerfCounter.ps1'

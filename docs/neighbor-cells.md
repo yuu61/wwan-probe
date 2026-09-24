@@ -7,7 +7,7 @@
 
 - L860-GL は WinRT (`GetCellsInfoAsync()`) では近隣セルを返さない (1.)。
 - AT ポート (COM) は ModemControl ドライバに占有されていて開けない (2.)。
-- **MBIM の Intel AT Tunnel サービス経由で `AT+XMCI=1` を送ると近隣セルを取得できる** (5.)。
+- **MBIM の Intel AT Tunnel サービス経由で `AT+XMCI` を送ると近隣セルを取得できる** (5.)。
   COM ポートもドライバの無効化も不要。TUI の Neighbors セクションはこの経路で実装している。
 
 ## 1. WinRT API は近隣セルを返さない
@@ -113,7 +113,7 @@ ModemControl Device を無効化すれば COM6 は解放されるはずだが、
 
 ```text
 AT+XMCI=?  ->  +XMCI: (0,1)
-AT+XMCI=1  ->
+AT+XMCI=1  ->  (AT+XMCI=0 も同じ形式)
 +XMCI: 4,440,50,"0x8AA8","0x0558E901","0x019F","0x0000170C","0x00005D5C","0xFFFFFFFF",61,20,19,"0x00000002","0x00000000"
 +XMCI: 5,000,000,"0xFFFE","0xFFFFFFFF","0x0184","0x00009F8A","0xFFFFFFFF","0xFFFFFFFF",31,15,255,"0x7FFFFFFF","0x00000000"
 ...
@@ -127,22 +127,53 @@ OK
 - 同時刻の WinRT サービングセル情報と照合し、各値が一致することを確認した
   (CI `0x0558E901`=89712897, PCI `0x019F`=415, EARFCN `0x170C`=5900, RSRP/RSRQ インデックスが同値)。
   → **RSRP / RSRQ は WinRT と同じ 3GPP 36.133 インデックス**で、`Convert-RsrpIndex` / `Convert-RsrqIndex` で変換できる。
-- RSSNR の単位は未確認 (表示には使っていない)。
+- RSSNR の単位は未確認 (6. 参照)。
+
+### XMCI=0 と XMCI=1
+
+- `<meas>`=0: 取得済みの測定情報をすべて返す。`<meas>`=1: サービングセルを新たに測定してから返す (マニュアル p.168)。
+- 実測では `AT+XMCI=0` は約 0.06 秒で返る。`AT+XMCI=1` は通常 0.5 秒程度だが、
+  弱電界 (B41, RSRP -115 dBm 付近) で **10 秒以上応答しない**ことが再現した (他のコマンドは同時刻でも 0.06 秒)。
+- 近隣セル一覧が目的なので、実装では `AT+XMCI=0` を使う。
 
 ### 実装
 
 | ファイル | 内容 |
 | --- | --- |
-| `src/infrastructure/Modem.ps1` | `Invoke-ModemAtCommand`: AT Tunnel で AT コマンドを送り応答文字列を返す |
+| `src/infrastructure/Modem.ps1` | `Invoke-ModemAtCommand`: 1 つの AT Tunnel セッションで複数コマンドを順に送り、`@{ コマンド = 応答文字列 }` を返す |
 | `src/domain/CellMeasurement.ps1` | `ConvertFrom-XmciResponse`: `+XMCI:` 行を LTE セルのオブジェクトに変換 |
-| `src/application/Snapshot.ps1` | `Get-LteNeighbor`: `AT+XMCI=1` の近隣セルを snapshot の `Neighbors` にする |
-| `src/presentation/Frame.ps1` | Neighbors セクションの表示 |
+| `src/domain/ModemStatus.ps1` | `+MTSM` / `+XCESQ` / `+XLEC` / `+XACT` の応答パーサー |
+| `src/application/Snapshot.ps1` | `Get-AtStatus`: 毎回の更新で近隣セル・温度・RSSNR・CA を取得。`Get-ModemSummary`: 有効 LTE バンドを起動時に 1 回取得 |
+| `src/presentation/Frame.ps1` | `LTE bands` 行、`Temp / RSSNR / CA` 行、Neighbors セクションの表示 |
 
 - PowerShell は CsWinRT の `IBuffer` を引数・戻り値として正しく扱えない
   (`WinRT.IInspectable` から `IBuffer` への変換で失敗する) ため、
   `SendSetCommandAsync` / `ResponseData` / `ToArray` はリフレクション経由で呼んでいる。
-- AT 取得に失敗してもサービングセルの表示は継続し、Neighbors に `(unavailable: <理由>)` を表示する。
-- 近隣セルは CSV には出力していない。
+- 1 コマンドのタイムアウトは 3 秒。タイムアウトしたらそのセッションの残りのコマンドは送らず `$null` にする。
+  毎回の更新では `AT+MTSM=1`, `AT+XCESQ?`, `AT+XLEC?`, `AT+XMCI=0` の順に送る (XMCI を最後にして、詰まっても他の値は残す)。
+- 取得できなかった値は `n/a`、近隣セルは `(unavailable: <理由>)` と表示し、サービングセルの表示は継続する。
+- 近隣セル・温度・RSSNR・CA は CSV には出力していない。
+
+## 6. AT Tunnel で取れるその他の値 (マニュアル V3.2.3 で確認)
+
+出典: FIBOCOM L860 AT Commands User Manual V3.2.3 (254 ページ)。実測は 2026-09-24、読み取り系コマンドのみ。
+
+| コマンド | 実測応答 | マニュアルの定義 | 解釈 | 表示 |
+| --- | --- | --- | --- | --- |
+| `AT+MTSM=1` (4.2.4, p.51) | `+MTSM: 52` | `<Report>`=1: 現在温度を 1 回報告。`<Temp>` -40〜125、単位は摂氏 | モデム温度 52℃ (確定)。`<Report>`=6 で BBIC、7 で RF の温度 (未試行) | `Temp` |
+| `AT+XLEC?` (9.1.16, p.172-173) | `+XLEC: 0,2,3,5,BAND_LTE_18,0,0,0,0` | `<n>,<no_of_cells>,[<bandwidth>[,...]]`。`no_of_cells`: 0=LTE 以外、1=PCell のみ、2〜5=SCell あり。`bandwidth`: 0=1.4 / 1=3 / 2=5 / 3=10 / 4=15 / 5=20 MHz, 255=無効 | CA で 2 セル、10 MHz + 20 MHz (確定)。`BAND_LTE_18,0,0,0,0` はマニュアルに記載なし (PCell のバンドと推測) | `CA` |
+| `AT+XCESQ?` (9.1.19, p.177-179) | `+XCESQ: 0,99,99,255,255,19,58,11,255,255,255,255` | `<n>,<rxlev>,<ber>,<rscp>,<ecno>,<rsrq>,<rsrp>,<rssnr>,...`。範囲は rsrq 0-34, rsrp 0-97, **rssnr -100〜100** (255=不明) | rsrq/rsrp は 3GPP インデックス。**rssnr の単位はマニュアルに記載なし** | `RSSNR (raw)` |
+| `AT+XACT?` | `+XACT: 4,2,1,1,2,4,5,8,101,...,171` | **マニュアルに記載なし** | 101〜171 は `band_info` と同じ「100 + LTE バンド番号」の有効バンド一覧と推測 | `LTE bands` |
+| `AT+XMCI` (9.1.13, p.167-169) | 5. 参照 | フィールド名のみで、RSRP / RSRQ / RSSNR / PATHLOSS_LTE / CQI の単位の定義はない。例では RSSNR=-24 | RSSNR の単位は未確定 | Neighbors |
+| `AT+XCCINFO?` (9.1.14, p.169-170) | `+XCCINFO: 0,440,51,"0558E901",3,118,"FFFF",1,"FF","8AA8",0,...` | `<mode>,<mcc>,<mnc>,<ci>,<rat>,<band_info>,<lac>,<area_type>,<rac>,<tac>,...`。個別の値の定義はなし。例: `rat`=3, `band_info`=103 | `band_info` は 100 + LTE バンド番号と推測 (118=B18、実機の EARFCN 5900=B18 と一致) | なし |
+| `AT+CSQ` | `+CSQ: 15,4` / `+CSQ: 16,5` / `+CSQ: 0,2` | 3GPP TS 27.007 (-113 + 2×rssi dBm) | **RSSI ではなく RSRP の読み替え**。同時刻の RSRP (XCESQ) が -83 / -81 / -115 dBm のとき、CSQ 換算は -83 / -81 / -113 dBm (下限張り付き) で一致 | なし (新しい情報がないため) |
+
+- rssnr (SINR) は XCESQ で -100〜100 の範囲とされるが、単位 (dB / 0.5 dB など) は記載がない。
+  そのため「単位不明の生値」として `(raw)` を付けて表示している。
+- RSSI は CSQ からは得られない (上表)。`netsh mbn show interfaces` の `RSSI / RSCP` (MBIM の信号状態) は
+  同時刻に `6 (-101 dBm)` で、CSQ (`0`) とも異なる。
+- `AT+GTCCINFO?`, `AT+GTCAINFO?`, `AT+XTEMP=?`, `AT+GTSENRDTEMP=?`, `AT+XTAMR=?`,
+  `AT+XCMODE?`, `AT+XBANDSEL?` はこのモデムでは `ERROR`。
 
 ## 再確認手順
 
@@ -152,5 +183,5 @@ OK
 Import-WinRtProjection (Join-Path (Get-Location) 'lib')
 $m = Get-DefaultModem
 @((Get-ModemCellsInfo $m.CurrentNetwork).NeighboringCellsLte).Count  # WinRT (現状 0)
-Invoke-ModemAtCommand $m 'AT+XMCI=1'                                 # AT Tunnel
+Invoke-ModemAtCommand $m @('AT+XMCI=0', 'AT+MTSM=1', 'AT+XCESQ?', 'AT+XLEC?', 'AT+XACT?')  # AT Tunnel
 ```
