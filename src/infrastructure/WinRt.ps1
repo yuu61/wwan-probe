@@ -13,14 +13,32 @@ function Import-WinRtProjection([string]$LibDir) {
 # Helper: Await WinRT async (IAsyncOperation<T>)
 function Wait-WinRtAsync($AsyncOp, [int]$TimeoutMs = 10000) {
     $task = [System.WindowsRuntimeSystemExtensions]::AsTask($AsyncOp)
-    # Short waits let PowerShell stop the sampling runspace promptly on quit.
+    return Wait-TaskResult -Start { $task }.GetNewClosure() -TimeoutMs $TimeoutMs
+}
+
+# Returns the result of the first completed task started by $Start (a scriptblock returning a Task);
+# a faulted task rethrows. $Start runs once, and once more if nothing has completed after
+# $ResendAfterMs; both tasks are then awaited until $TimeoutMs in total. Nothing is cancelled.
+function Wait-TaskResult([scriptblock]$Start, [int]$TimeoutMs, [int]$ResendAfterMs = [int]::MaxValue) {
+    $tasks = [System.Collections.Generic.List[System.Threading.Tasks.Task]]::new()
+    $tasks.Add((& $Start))
     $timer = [Diagnostics.Stopwatch]::StartNew()
-    while (-not $task.IsCompleted) {
-        $remaining = $TimeoutMs - $timer.ElapsedMilliseconds
-        if ($remaining -le 0) { throw "WinRT async operation timed out (${TimeoutMs}ms)" }
-        $null = $task.Wait([int][math]::Min(50, $remaining))
+    while ($true) {
+        foreach ($t in $tasks) {
+            if (-not $t.IsCompleted) { continue }
+            # Wait(0) rethrows a fault even when the task completed before the loop.
+            $null = $t.Wait(0)
+            return $t.Result
+        }
+        $elapsed = $timer.ElapsedMilliseconds
+        if ($elapsed -ge $TimeoutMs) { throw "WinRT async operation timed out (${TimeoutMs}ms)" }
+        if ($tasks.Count -eq 1 -and $elapsed -ge $ResendAfterMs) {
+            $tasks.Add((& $Start))
+            continue
+        }
+        # Short waits let PowerShell stop the sampling runspace promptly on quit.
+        $wait = [math]::Min(50, $TimeoutMs - $elapsed)
+        if ($tasks.Count -eq 1) { $wait = [math]::Min($wait, $ResendAfterMs - $elapsed) }
+        $null = [System.Threading.Tasks.Task]::WaitAny($tasks.ToArray(), [int]$wait)
     }
-    # Preserve exception propagation even when the task completed before the loop.
-    $null = $task.Wait(0)
-    return $task.Result
 }

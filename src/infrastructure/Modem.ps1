@@ -5,9 +5,14 @@ function Get-DefaultModem {
     return [Windows.Networking.NetworkOperators.MobileBroadbandModem]::GetDefault()
 }
 
-function Get-ModemCellsInfo($Network) {
-    $asyncOp = $Network.GetCellsInfoAsync()
-    return Wait-WinRtAsync $asyncOp
+# On the L860-GL a cells query normally completes in 10-60 ms, but a few are never answered (with
+# AT running: 6 of ~400 samples in one run, 1 of 400 in another; the one observed failed after about
+# 60 s) while a new query succeeds at once (measured 2026-09-24, docs/neighbor-cells.md). So a query
+# still pending after 2 s is sent once more and the first answer of the two wins; a slow first answer
+# is still taken within 10 s, but that modem then gets a second query (untested on other modems).
+function Get-ModemCellsInfo($Network, [int]$ResendAfterMs = 2000, [int]$TimeoutMs = 10000) {
+    $start = { [System.WindowsRuntimeSystemExtensions]::AsTask($Network.GetCellsInfoAsync()) }.GetNewClosure()
+    return Wait-TaskResult -Start $start -TimeoutMs $TimeoutMs -ResendAfterMs $ResendAfterMs
 }
 
 # Vendor MBIM device services that carry AT commands, in probe order (libmbim data/mbim-service-*.json,

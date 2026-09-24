@@ -5,7 +5,8 @@ $root = Split-Path $PSScriptRoot -Parent
 foreach ($file in @(
     'src/domain/Signal.ps1', 'src/domain/Band.ps1', 'src/domain/CellMeasurement.ps1',
     'src/domain/ModemStatus.ps1', 'src/domain/QuectelStatus.ps1', 'src/domain/FibocomStatus.ps1',
-    'src/domain/AtProfile.ps1', 'src/domain/Downgrade.ps1', 'src/infrastructure/Modem.ps1'
+    'src/domain/AtProfile.ps1', 'src/domain/Downgrade.ps1', 'src/infrastructure/WinRt.ps1',
+    'src/infrastructure/Modem.ps1'
 )) { . (Join-Path $root $file) }
 
 function Assert-True($Condition, [string]$Message) {
@@ -228,6 +229,35 @@ Assert-Equal "`r`nOK`r`n" (ConvertFrom-MbimAtResponse 'Crlf' ([Text.Encoding]::A
 Assert-Equal '' (ConvertFrom-MbimAtResponse 'Crlf' ([byte[]]::new(0))) 'CRLF empty response'
 Assert-Equal '' (ConvertFrom-MbimAtResponse 'Crlf' $null) 'CRLF missing buffer'
 Write-Output 'PASS: MBIM AT framing'
+
+# Wait-TaskResult (behind Wait-WinRtAsync / Get-ModemCellsInfo) with plain .NET tasks. $Start hands out
+# $script:queued in order; a TaskCompletionSource that is never completed is a query left unanswered.
+function New-PendingTask { return [System.Threading.Tasks.TaskCompletionSource[string]]::new().Task }
+$startQueued = { $script:starts++; $script:queued[$script:starts - 1] }
+function Invoke-WaitTest([object[]]$Tasks, [int]$TimeoutMs, [int]$ResendAfterMs = [int]::MaxValue) {
+    $script:queued = $Tasks
+    $script:starts = 0
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $result = $null; $err = $null
+    try { $result = Wait-TaskResult -Start $startQueued -TimeoutMs $TimeoutMs -ResendAfterMs $ResendAfterMs }
+    catch { $err = $_.Exception.Message }
+    return [pscustomobject]@{ Result = $result; Error = $err; Starts = $script:starts; Ms = $sw.ElapsedMilliseconds }
+}
+$r = Invoke-WaitTest @([System.Threading.Tasks.Task]::FromResult('first')) -TimeoutMs 1000 -ResendAfterMs 100
+Assert-True ($r.Result -eq 'first' -and $r.Starts -eq 1) 'A completed query is returned without a resend'
+$r = Invoke-WaitTest @((New-PendingTask), [System.Threading.Tasks.Task]::FromResult('resent')) -TimeoutMs 5000 -ResendAfterMs 200
+Assert-True ($r.Result -eq 'resent' -and $r.Starts -eq 2 -and $r.Ms -ge 190 -and $r.Ms -lt 2000) "An unanswered query is sent once more after ResendAfterMs ($($r.Ms)ms)"
+$r = Invoke-WaitTest @([System.Threading.Tasks.Task]::Delay(400), (New-PendingTask)) -TimeoutMs 5000 -ResendAfterMs 100
+Assert-True ($null -eq $r.Error -and $r.Starts -eq 2 -and $r.Ms -ge 350 -and $r.Ms -lt 2000) "A slow first answer after the resend is still taken ($($r.Ms)ms)"
+$r = Invoke-WaitTest @((New-PendingTask), (New-PendingTask)) -TimeoutMs 400 -ResendAfterMs 100
+Assert-True ($r.Error -eq 'WinRT async operation timed out (400ms)' -and $r.Starts -eq 2 -and $r.Ms -lt 1500) 'Two unanswered queries time out after TimeoutMs in total'
+$r = Invoke-WaitTest @((New-PendingTask), (New-PendingTask)) -TimeoutMs 200
+Assert-True ($r.Error -match 'timed out' -and $r.Starts -eq 1) 'Without ResendAfterMs nothing is resent (Wait-WinRtAsync)'
+$failed = [System.Threading.Tasks.TaskCompletionSource[string]]::new()
+$failed.SetException([InvalidOperationException]::new('modem error'))
+$r = Invoke-WaitTest @($failed.Task, (New-PendingTask)) -TimeoutMs 1000 -ResendAfterMs 100
+Assert-True ($r.Error -match 'modem error' -and $r.Starts -eq 1) 'A failed query is rethrown, not resent'
+Write-Output 'PASS: WinRT wait with one resend'
 
 # Startup detection (Initialize-ModemAt / Find-ModemAtChannel) with a simulated modem.
 # $script:mockAt maps a channel name to { param($command) <response or $null> }; other channels throw.
