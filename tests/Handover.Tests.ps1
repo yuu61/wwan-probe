@@ -165,3 +165,25 @@ $frame = Get-MonitorFrame $session $view 80
 Assert-True (($frame.Body.Text -join "`n") -match 'AT: unavailable \(no AT channel \(4 MBIM services tried\)\)') 'Missing AT reason.'
 Assert-True (@($frame.Body.Text | Where-Object { $_.Length -gt 80 }).Count -eq 0) 'Header lines must fit 80 columns.'
 Write-Output 'PASS: device header for other vendors and missing AT'
+
+# RX / TX share one log scale while both are shown; a chart shown alone keeps its own.
+foreach ($name in @($session.History.Keys)) { $session.History[$name].Clear() }
+for ($i = 0; $i -lt 10; $i++) {
+    $session.History['Rsrp'].Add(-90); $session.History['Rsrq'].Add(-10); $session.History['Rssnr'].Add(10); $session.History['TempC'].Add(40)
+    $session.History['RxKB'].Add(20 + 6 * $i); $session.History['TxKB'].Add(0.2)
+}
+function Get-ThroughputScale { @((Get-MonitorFrame $session $view 120).Body.Text | Select-String 'log scale (\S+\.\.\S+) B/s' | ForEach-Object { $_.Matches[0].Groups[1].Value }) -join ',' }
+$view.ChartVisible['4'] = $true
+$view.ChartVisible['5'] = $true
+Assert-True ((Get-ThroughputScale) -eq '100..100k,100..100k') 'RX and TX must share one scale.'
+$view.ChartVisible['5'] = $false
+Assert-True ((Get-ThroughputScale) -eq '10k..100k') 'RX alone must keep its own scale.'
+$view.ChartVisible['4'] = $false
+$view.ChartVisible['5'] = $true
+Assert-True ((Get-ThroughputScale) -eq '100..1k') 'TX alone must keep its own scale.'
+$view.ChartVisible['4'] = $true
+$view.Unicode = $true
+$text = (Get-MonitorFrame $session $view 120).Body.Text -join "`n"
+Assert-True ($text -match ' RX +100k \|' -and $text -match ' TX +100k \|' -and ([regex]::Matches($text, 'log, 5\.3 levels/decade')).Count -eq 2) 'Unicode RX and TX must share axis labels.'
+$view.Unicode = $false
+Write-Output 'PASS: RX / TX shared scale'
