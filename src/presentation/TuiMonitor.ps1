@@ -1,5 +1,6 @@
 # Presentation: interactive full-screen TUI loop.
-# Keys: q / Esc / Ctrl+C = quit, p = pause/resume, r = refresh now
+# Keys: q / Esc / Ctrl+C = quit, p = pause/resume, r = refresh now,
+#       1-6 = show/hide one history chart, g = show/hide all charts
 
 # Renders current state; clears the screen once when the window is resized.
 function Show-TuiScreen($Session, [hashtable]$View) {
@@ -33,6 +34,9 @@ function Wait-TuiInput($Session, [hashtable]$View) {
                 if (-not $View.Paused) { return }
             }
             if ($key.Key -eq 'R') { $View.RefreshRequested = $true; return }
+            # Chart toggles only redraw; they do not take a new sample.
+            $chartKey = if ($key.Key -eq 'G') { 'all' } else { "$($key.KeyChar)" }
+            if (Switch-ChartVisibility $View.ChartVisible $chartKey) { Show-TuiScreen $Session $View }
         }
         # Keep layout correct while waiting if the window is resized.
         if (Test-WindowResized $View) { Show-TuiScreen $Session $View }
@@ -44,7 +48,7 @@ function Wait-TuiInput($Session, [hashtable]$View) {
 function Invoke-TuiMonitor($Session) {
     $view = @{
         Paused = $false; Fetching = $false; Done = $false; Quit = $false; Unicode = $true
-        RefreshRequested = $true; LastWidth = 0; LastHeight = 0
+        RefreshRequested = $true; LastWidth = 0; LastHeight = 0; ChartVisible = New-ChartVisibility
     }
     $savedCursor = [Console]::CursorVisible
     $savedCtrlC = [Console]::TreatControlCAsInput

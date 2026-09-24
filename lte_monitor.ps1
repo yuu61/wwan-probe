@@ -3,7 +3,8 @@
 # Usage: .\lte_monitor.ps1 [-Interval 0] [-Count 0] [-CsvPath "log.csv"]
 # Interval=0 means back-to-back sampling (each sample still takes ~1s for counters).
 # Count=0 means infinite loop. CsvPath enables CSV logging.
-# Keys:  q / Esc / Ctrl+C = quit,  p = pause/resume,  r = refresh now
+# Keys:  q / Esc / Ctrl+C = quit,  p = pause/resume,  r = refresh now,
+#        1-6 = show/hide a history chart (RSRP/RSRQ/SNR/RX/TX/Temp),  g = show/hide all charts
 # Requires PowerShell 7.4+ (Windows). Run .\setup.ps1 once beforehand to download
 # the WinRT projection DLLs into .\lib (Windows PowerShell 5.1 is not supported).
 # When stdin/stdout is redirected, falls back to plain sequential output.

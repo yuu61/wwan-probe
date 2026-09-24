@@ -33,6 +33,19 @@ function Get-AutoScale {
     return [pscustomobject]@{ Min = $lo; Max = $hi }
 }
 
+# Scale anchored at 0 for non-negative series with no natural range (throughput):
+# Max is the max valid value rounded up to 1/2/5 x 10^n, at least $MinMax so an idle
+# link does not magnify noise.
+function Get-ZeroBasedScale([double[]]$Values, [double]$MinMax) {
+    $valid = @($Values | Where-Object { -not [double]::IsNaN($_) })
+    $max = if ($valid.Count -eq 0) { 0 } else { ($valid | Measure-Object -Maximum).Maximum }
+    if ($max -le $MinMax) { return [pscustomobject]@{ Min = 0; Max = $MinMax } }
+    $p = [math]::Pow(10, [math]::Floor([math]::Log10($max)))
+    foreach ($m in 1, 2, 5, 10) {
+        if ($m * $p -ge $max) { return [pscustomobject]@{ Min = 0; Max = $m * $p } }
+    }
+}
+
 # Sparklines map [Min, Max] linearly onto N levels (values outside are clamped).
 # Only the most recent $Width samples are shown, right-aligned. NaN (missing sample)
 # is drawn as a blank column so series sharing a time axis stay aligned.

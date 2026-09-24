@@ -144,7 +144,7 @@ OK
 | `src/domain/CellMeasurement.ps1` | `ConvertFrom-XmciResponse`: `+XMCI:` 行を LTE セルのオブジェクトに変換 |
 | `src/domain/ModemStatus.ps1` | `+MTSM` / `+XCESQ` / `+XLEC` / `+XACT` の応答パーサー |
 | `src/application/Snapshot.ps1` | `Get-AtStatus`: 毎回の更新で近隣セル・温度・RSSNR・CA を取得。`Get-ModemSummary`: 有効 LTE バンドを起動時に 1 回取得 |
-| `src/presentation/Frame.ps1` | `LTE bands` 行、`Temp / RSSNR / CA` 行、Neighbors セクションの表示 |
+| `src/presentation/Frame.ps1` | `LTE bands` 行、`Temp / RSSNR / CA` 行、Neighbors セクションの表示。RSSNR (`SNR`) と温度 (`Temp`) は History にもグラフ表示 |
 
 - PowerShell は CsWinRT の `IBuffer` を引数・戻り値として正しく扱えない
   (`WinRT.IInspectable` から `IBuffer` への変換で失敗する) ため、
@@ -153,6 +153,8 @@ OK
   毎回の更新では `AT+MTSM=1`, `AT+XCESQ?`, `AT+XLEC?`, `AT+XMCI=0` の順に送る (XMCI を最後にして、詰まっても他の値は残す)。
 - 取得できなかった値は `n/a`、近隣セルは `(unavailable: <理由>)` と表示し、サービングセルの表示は継続する。
 - 近隣セル・温度・RSSNR・CA は CSV には出力していない。
+- History のグラフは RSRP / RSRQ / SNR / RX / TX / Temp。TUI では `1`〜`6` で個別に、`g` で全部をまとめて表示・非表示を切り替える。
+  初期状態は RSRP / RSRQ / SNR のみ表示 (画面の高さを節約するため)。取得できなかった値はグラフ上で空白になる。
 
 ## 6. AT Tunnel で取れるその他の値 (マニュアル V3.2.3 で確認)
 

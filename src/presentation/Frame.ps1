@@ -1,8 +1,9 @@
 # Presentation: builds one screen (frame) as a list of (Text, Color) lines.
 # Pure with respect to the console: no cursor / write operations here.
 #
-# View state: @{ Paused; Fetching; Done; Quit; Unicode; LastWidth; LastHeight } (owned by the monitor loop)
+# View state: @{ Paused; Fetching; Done; Quit; Unicode; LastWidth; LastHeight; ChartVisible } (owned by the monitor loop)
 # Unicode = console accepts non-ASCII glyphs (TUI switches to UTF-8; plain output does not).
+# ChartVisible = @{ <chart Key> = $true/$false } (New-ChartVisibility); $null = defaults.
 
 function New-FrameLine {
     # Pure factory (no state change), ShouldProcess is not applicable.
@@ -46,35 +47,99 @@ function Add-DowngradeLine([System.Collections.Generic.List[object]]$Lines, $Fin
     }
 }
 
+# History charts in display order. Key = toggle key in the TUI, History = Session.History name.
+# Scale: @{ Step; MinSpan; Floor; Ceiling } for Get-AutoScale, or @{ ZeroBased; MinMax } for
+# Get-ZeroBasedScale. StepUnit = unit of a value difference (dBm differences are dB).
+$script:HistoryCharts = @(
+    [pscustomobject]@{ Key = '1'; Label = 'RSRP'; History = 'Rsrp'; Unit = 'dBm'; StepUnit = 'dB'; Color = 'DarkGreen'; Visible = $true
+        Scale = @{ Step = 5; MinSpan = 10; Floor = -140; Ceiling = -44 } }
+    [pscustomobject]@{ Key = '2'; Label = 'RSRQ'; History = 'Rsrq'; Unit = 'dB'; StepUnit = 'dB'; Color = 'DarkYellow'; Visible = $true
+        Scale = @{ Step = 1; MinSpan = 4; Floor = -20; Ceiling = -3 } }
+    [pscustomobject]@{ Key = '3'; Label = 'SNR'; History = 'Rssnr'; Unit = 'dB'; StepUnit = 'dB'; Color = 'DarkCyan'; Visible = $true
+        Scale = @{ Step = 5; MinSpan = 10; Floor = -50; Ceiling = 50 } }
+    [pscustomobject]@{ Key = '4'; Label = 'RX'; History = 'RxKB'; Unit = 'KB/s'; StepUnit = 'KB/s'; Color = 'DarkMagenta'; Visible = $false
+        Scale = @{ ZeroBased = $true; MinMax = 10 } }
+    [pscustomobject]@{ Key = '5'; Label = 'TX'; History = 'TxKB'; Unit = 'KB/s'; StepUnit = 'KB/s'; Color = 'Magenta'; Visible = $false
+        Scale = @{ ZeroBased = $true; MinMax = 10 } }
+    [pscustomobject]@{ Key = '6'; Label = 'Temp'; History = 'TempC'; Unit = 'C'; StepUnit = 'C'; Color = 'DarkRed'; Visible = $false
+        Scale = @{ Step = 5; MinSpan = 10; Floor = -40; Ceiling = 125 } }
+)
+
+# Initial chart visibility: @{ <Key> = $true/$false }.
+function New-ChartVisibility {
+    # Pure factory (no state change), ShouldProcess is not applicable.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
+    param()
+
+    $visible = @{}
+    foreach ($c in $script:HistoryCharts) { $visible[$c.Key] = $c.Visible }
+    return $visible
+}
+
+# Toggles one chart ($Key = '1'..) or, with $Key = 'all', hides every chart when any
+# is shown and shows every chart otherwise. Returns $false for an unknown key.
+function Switch-ChartVisibility([hashtable]$Visible, [string]$Key) {
+    if ($Key -eq 'all') {
+        $show = -not ($Visible.Values -contains $true)
+        foreach ($k in @($Visible.Keys)) { $Visible[$k] = $show }
+        return $true
+    }
+    if (-not $Visible.ContainsKey($Key)) { return $false }
+    $Visible[$Key] = -not $Visible[$Key]
+    return $true
+}
+
+# Axis label that fits 5 columns: 10000 and above as "10k".
+function Format-AxisValue([double]$Value) {
+    if ([math]::Abs($Value) -ge 10000) { return "{0:0}k" -f ($Value / 1000) }
+    return "{0:0.##}" -f $Value
+}
+
 # Appends one history chart (sparkline rows + stats line) to $Lines.
-# $Scale: @{ Step; MinSpan; Floor; Ceiling } for Get-AutoScale. The scale is computed
-# from the visible (most recent) samples only; its bounds are shown as the axis labels.
-# Stats cover the whole history.
+# The scale is computed from the visible (most recent) samples only; its bounds are
+# shown as the axis labels. Stats cover the whole history.
 function Add-HistoryChart {
     param(
-        [System.Collections.Generic.List[object]]$Lines, [string]$Label, [double[]]$Values,
-        [hashtable]$Scale, [string]$Unit, [string]$Color, [int]$Width, [bool]$Unicode
+        [System.Collections.Generic.List[object]]$Lines, $Chart, [double[]]$Values,
+        [int]$Width, [bool]$Unicode
     )
     $headWidth = 12
     $sparkWidth = [math]::Max(10, $Width - $headWidth - 4)
     $visible = @($Values | Select-Object -Last $sparkWidth)
-    $range = Get-AutoScale -Values $visible @Scale
+    $scale = $Chart.Scale
+    $range = if ($scale.ZeroBased) { Get-ZeroBasedScale -Values $visible -MinMax $scale.MinMax } else { Get-AutoScale -Values $visible @scale }
+    $maxText = Format-AxisValue $range.Max
+    $minText = Format-AxisValue $range.Min
     if ($Unicode) {
         $rows = Get-BlockSparkline $visible $range.Min $range.Max $sparkWidth
-        $Lines.Add((New-FrameLine ((" {0,-5}{1,5} |{2}|" -f $Label, $range.Max, $rows[0])) $Color))
-        $Lines.Add((New-FrameLine ((" {0,-5}{1,5} |{2}|" -f "", $range.Min, $rows[1])) $Color))
-        # Step is a difference, so it is always in dB (not dBm).
-        $scaleText = "{0:0.##} dB/level" -f (($range.Max - $range.Min) / 16)
+        $Lines.Add((New-FrameLine ((" {0,-5}{1,5} |{2}|" -f $Chart.Label, $maxText, $rows[0])) $Chart.Color))
+        $Lines.Add((New-FrameLine ((" {0,-5}{1,5} |{2}|" -f "", $minText, $rows[1])) $Chart.Color))
+        $scaleText = "{0:0.##} {1}/level" -f (($range.Max - $range.Min) / 16), $Chart.StepUnit
     }
     else {
-        $Lines.Add((New-FrameLine ((" {0,-10} |{1}|" -f $Label, (Get-Sparkline $visible $range.Min $range.Max $sparkWidth))) $Color))
-        $scaleText = "scale {0}..{1} {2}: _ . - ~ = + * #" -f $range.Min, $range.Max, $Unit
+        $Lines.Add((New-FrameLine ((" {0,-10} |{1}|" -f $Chart.Label, (Get-Sparkline $visible $range.Min $range.Max $sparkWidth))) $Chart.Color))
+        $scaleText = "scale {0}..{1} {2}: _ . - ~ = + * #" -f $minText, $maxText, $Chart.Unit
     }
     $stat = Get-SignalStatistic $Values
     $text = if ($null -eq $stat) { "(no valid samples)" } else {
-        "min {0} / avg {1} / max {2} {3}  (n={4}, {5})" -f $stat.Min, $stat.Avg, $stat.Max, $Unit, $stat.Count, $scaleText
+        "min {0} / avg {1} / max {2} {3}  (n={4}, {5})" -f $stat.Min, $stat.Avg, $stat.Max, $Chart.Unit, $stat.Count, $scaleText
     }
     $Lines.Add((New-FrameLine ((" " * ($headWidth + 1)) + $text) "DarkGray"))
+}
+
+# History section: the visible charts on one time axis; hidden ones are listed in the title.
+function Add-HistorySection {
+    param([System.Collections.Generic.List[object]]$Lines, $Session, [hashtable]$View, [int]$Width)
+
+    $visibility = if ($View.ChartVisible) { $View.ChartVisible } else { New-ChartVisibility }
+    $shown = @($script:HistoryCharts | Where-Object { $visibility[$_.Key] })
+    $hidden = @($script:HistoryCharts | Where-Object { -not $visibility[$_.Key] })
+    $title = "History (primary cell)"
+    if ($hidden.Count -gt 0) { $title += "  hidden: " + (($hidden | ForEach-Object { "$($_.Key) $($_.Label)" }) -join ", ") }
+    $Lines.Add((New-FrameLine (Get-SectionRule $title $Width) "DarkCyan"))
+    foreach ($chart in $shown) {
+        Add-HistoryChart -Lines $Lines -Chart $chart -Values $Session.History[$chart.History].ToArray() -Width $Width -Unicode $View.Unicode
+    }
 }
 
 function Get-MonitorFrame {
@@ -140,14 +205,9 @@ function Get-MonitorFrame {
             $lines.Add((New-FrameLine " $($c.Band) | EARFCN:$($c.Earfcn) | PCI:$($c.Pci) | CellID:$($c.CellId) | TAC:$($c.Tac) | TA:$($c.Ta) | MNC:$($c.Provider)"))
         }
 
-        # History (primary serving cell), RSRP and RSRQ on the same time axis
-        $rsrp = $Session.RsrpHistory.ToArray()
-        if ($rsrp.Count -gt 0) {
-            $lines.Add((New-FrameLine (Get-SectionRule "History (primary cell)" $Width) "DarkCyan"))
-            Add-HistoryChart -Lines $lines -Label "RSRP" -Values $rsrp -Unit "dBm" `
-                -Scale @{ Step = 5; MinSpan = 10; Floor = -140; Ceiling = -44 } -Color "DarkGreen" -Width $Width -Unicode $View.Unicode
-            Add-HistoryChart -Lines $lines -Label "RSRQ" -Values $Session.RsrqHistory.ToArray() -Unit "dB" `
-                -Scale @{ Step = 1; MinSpan = 4; Floor = -20; Ceiling = -3 } -Color "DarkYellow" -Width $Width -Unicode $View.Unicode
+        # History (primary serving cell and modem-wide values) on one time axis
+        if ($Session.History['Rsrp'].Count -gt 0) {
+            Add-HistorySection -Lines $lines -Session $Session -View $View -Width $Width
         }
 
         # Neighbors (AT+XMCI via the Intel AT Tunnel service)
@@ -179,7 +239,7 @@ function Get-MonitorFrame {
 
     # Footer is returned separately so it can be pinned to the bottom row.
     $csvStr = if ($config.CsvPath) { "  CSV: $($config.CsvPath)" } else { "" }
-    $footer = New-FrameLine " [q] Quit  [p] Pause  [r] Refresh   Interval: $($config.Interval)s$csvStr" "Black"
+    $footer = New-FrameLine " [q] Quit  [p] Pause  [r] Refresh  [1-6] Chart  [g] All charts   Interval: $($config.Interval)s$csvStr" "Black"
 
     return [pscustomobject]@{ Body = $lines; Footer = $footer }
 }
