@@ -24,7 +24,7 @@ function Format-OptionalValue($Value, [string]$Format) {
     return ($Format -f $Value)
 }
 
-# $Ca: @{ Cells; BandwidthsMHz } from +XLEC
+# $Ca: @{ Cells; BandwidthsMHz } (ConvertFrom-AtStatus)
 function Format-CarrierAggregation($Ca) {
     if ($null -eq $Ca) { return 'n/a' }
     if ($Ca.Cells -eq 0) { return 'not on LTE' }
@@ -252,7 +252,7 @@ function Get-MonitorFrame {
     $status = if ($View.Done) { 'DONE' } elseif ($View.Paused) { 'PAUSED' } elseif ($View.Fetching) { 'UPDATING' } else { 'RUNNING' }
     $countStr = if ($config.Count -eq 0) { '' } else { "/$($config.Count)" }
     $right = "#$($Session.Iteration)$countStr  [$status]"
-    $left = ' Fibocom L860-GL LTE Signal Monitor'
+    $left = ' wwan-probe LTE Signal Monitor'
     $pad = [math]::Max(1, $Width - $left.Length - $right.Length - 1)
     $lines.Add((New-FrameLine ($left + (' ' * $pad) + $right) 'Cyan'))
     $lines.Add((New-FrameLine $rule 'Cyan'))
@@ -272,6 +272,14 @@ function Get-MonitorFrame {
     $lines.Add((New-FrameLine " Model: $($summary.Model)   FW: $($summary.Firmware)"))
     $lines.Add((New-FrameLine " IMEI:  $($summary.Imei)   ICCID: $($summary.SimIccId)   SPN: $($summary.SimSpn)"))
     $lines.Add((New-FrameLine " Radio: $($summary.RadioState)   DataClass: $($summary.DataClass)"))
+    $at = $summary.At
+    if ($at -and $at.Profile) {
+        $lines.Add((New-FrameLine " AT: $($at.Channel.Name) / $($at.Profile.Name)" 'DarkGray'))
+    }
+    else {
+        $reason = if ($at -and $at.Error) { $at.Error } else { 'not initialized' }
+        $lines.Add((New-FrameLine " AT: unavailable ($reason)" 'DarkGray'))
+    }
     $rat = $summary.RatConfig
     if ($null -eq $rat) {
         $lines.Add((New-FrameLine ' RAT: n/a   LTE bands: n/a' 'DarkGray'))
@@ -279,10 +287,13 @@ function Get-MonitorFrame {
     else {
         $legacyBands = @($rat.GsmBands | ForEach-Object { "$_" }) + @($rat.UmtsBands | ForEach-Object { "B$_" })
         $legacyAllowed = $rat.Allowed -match '2G|3G'
-        $ratText = " RAT: $($rat.Allowed) (prefer $($rat.Preferred))"
+        $ratText = " RAT: $($rat.Allowed)"
+        if ($rat.Preferred) { $ratText += " (prefer $($rat.Preferred))" }
         if ($legacyAllowed) { $ratText += "   2G/3G bands: $($legacyBands -join ' ')   [2G/3G enabled: downgrade possible]" }
         $lines.Add((New-FrameLine $ratText $(if ($legacyAllowed) { 'DarkYellow' } else { 'DarkGray' })))
-        $lines.Add((New-FrameLine (' LTE bands: ' + (($rat.LteBands | ForEach-Object { "B$_" }) -join ' ')) 'DarkGray'))
+        $bandText = ' LTE bands: ' + (($rat.LteBands | ForEach-Object { "B$_" }) -join ' ')
+        if (@($rat.NrBands).Count -gt 0) { $bandText += '   NR bands: ' + (($rat.NrBands | ForEach-Object { "n$_" }) -join ' ') }
+        $lines.Add((New-FrameLine $bandText 'DarkGray'))
     }
 
     # Network
@@ -317,10 +328,10 @@ function Get-MonitorFrame {
             Add-HistorySection -Lines $lines -Session $Session -View $View -Width $Width
         }
 
-        # Neighbors (AT+XMCI via the Intel AT Tunnel service)
+        # Neighbors (AT channel, e.g. AT+XMCI; WinRT when the modem reports them there)
         if ($null -eq $snapshot.Neighbors) {
             $lines.Add((New-FrameLine (Get-SectionRule 'Neighbors' $Width) 'DarkCyan'))
-            $reason = if ($snapshot.AtError) { $snapshot.AtError } else { 'AT+XMCI failed' }
+            $reason = if ($snapshot.AtError) { $snapshot.AtError } else { 'neighbor cell query failed' }
             $lines.Add((New-FrameLine " (unavailable: $reason)" 'DarkGray'))
         }
         else {

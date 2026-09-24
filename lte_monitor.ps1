@@ -1,8 +1,10 @@
 #Requires -Version 7.4
-# Fibocom L860-GL LTE Signal Monitor (TUI)
-# Usage: .\lte_monitor.ps1 [-Interval 0] [-Count 0] [-CsvPath "log.csv"]
+# LTE Signal Monitor (TUI) for Windows mobile broadband modems (tested: Fibocom L860-GL)
+# Usage: .\lte_monitor.ps1 [-Interval 0] [-Count 0] [-CsvPath "log.csv"] [-AtPort COM7]
 # Interval=0 means back-to-back sampling (each sample still takes ~1s for counters).
 # Count=0 means infinite loop. CsvPath enables CSV logging (one row per sample, see src/application/SnapshotLog.ps1).
+# AT commands (neighbors, temperature, SINR, CA) go over a vendor MBIM service found automatically;
+# AtPort uses that serial AT port instead (see docs/modem-support.md).
 # Keys:  q / Esc / Ctrl+C = quit,  p = pause/resume,  r = refresh now,
 #        1-6 = show/hide a history chart (RSRP/RSRQ/SNR/RX/TX/Temp),  g = show/hide all charts
 #        h = handover history, Up/Down = chart height or newer/older handovers
@@ -17,7 +19,8 @@
 param(
     [ValidateRange(0, 86400)][int]$Interval = 0,
     [ValidateRange(0, [int]::MaxValue)][int]$Count = 0,
-    [string]$CsvPath = ''
+    [string]$CsvPath = '',
+    [ValidatePattern('^(COM\d+)?$')][string]$AtPort = ''
 )
 
 # Load order matters. Dot-source at top level (not inside a function) so the
@@ -27,6 +30,9 @@ $sources = @(
     'domain\Band.ps1'
     'domain\CellMeasurement.ps1'
     'domain\ModemStatus.ps1'
+    'domain\QuectelStatus.ps1'
+    'domain\FibocomStatus.ps1'
+    'domain\AtProfile.ps1'
     'domain\Downgrade.ps1'
     'infrastructure\WinRt.ps1'
     'infrastructure\Modem.ps1'
@@ -56,7 +62,7 @@ if (-not $modem) {
     exit 1
 }
 
-$config = [pscustomobject]@{ Interval = $Interval; Count = $Count; CsvPath = $CsvPath }
+$config = [pscustomobject]@{ Interval = $Interval; Count = $Count; CsvPath = $CsvPath; AtPort = $AtPort }
 $session = Initialize-MonitorSession -Modem $modem -Config $config
 
 if ([Console]::IsInputRedirected -or [Console]::IsOutputRedirected) {

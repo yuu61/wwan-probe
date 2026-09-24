@@ -66,7 +66,8 @@ Write-Output 'PASS: errors, missing cells and invalid identities reset the basel
 # into the primary-cell identity used for handover detection.
 function Get-ModemCellsInfo { return $script:cells }
 function Get-AdapterTraffic { return @{ BwMbps = 0; RxKB = 0; TxKB = 0 } }
-function Get-AtStatus { return @{ XmciCells = @(); Neighbors = @(); TempC = $null; Rssnr = $null; Ca = $null } }
+function Get-AtStatus { return $script:atStatus }
+$script:atStatus = @{ Cells = @(); Neighbors = @(); TempC = $null; Rssnr = $null; Ca = $null }
 $primary = [pscustomobject]@{
     ReferenceSignalReceivedPowerInDBm = 255; ReferenceSignalReceivedQualityInDBm = 255
     ChannelNumber = 100; PhysicalCellId = 10; CellId = 100; TrackingAreaCode = 20
@@ -90,6 +91,26 @@ $primary.CellId = 400
 Add-HandoverLog $log (Get-LteSnapshot $modem)
 Assert-True ($log.Count -eq 1) 'Primary change with missing RSRP was not detected.'
 Write-Output 'PASS: snapshot identity is independent of RSRP and CA secondary cells'
+
+# A modem following the MBIM spec reports dBm / dB, and may list neighbors in WinRT.
+$specCell = [pscustomobject]@{
+    ReferenceSignalReceivedPowerInDBm = -97; ReferenceSignalReceivedQualityInDBm = -11
+    ChannelNumber = 9460; PhysicalCellId = 5; CellId = 500; TrackingAreaCode = 30
+    TimingAdvanceInBitPeriods = 0; ProviderId = '44020'
+}
+$winRtNeighbor = [pscustomobject]@{
+    ReferenceSignalReceivedPowerInDBm = -105; ReferenceSignalReceivedQualityInDBm = -14
+    ChannelNumber = 1500; PhysicalCellId = 77; CellId = 4294967295; TrackingAreaCode = 30; ProviderId = '44020'
+}
+$script:cells = @{ ServingCellsLte = @($specCell); NeighboringCellsLte = @($winRtNeighbor) }
+$script:atStatus = @{ Cells = $null; Neighbors = $null; TempC = $null; Rssnr = $null; Ca = $null }
+$snapshot = Get-LteSnapshot $modem
+Assert-True ($snapshot.Serving.Count -eq 1 -and $snapshot.Serving[0].RsrpDbm -eq -97 -and $snapshot.Serving[0].RsrqDb -eq -11) 'Spec dBm serving cell was dropped.'
+Assert-True ($snapshot.Serving[0].Band -eq 'B28/700' -and $snapshot.PrimaryCell.RsrpDbm -eq -97) 'Spec serving cell identity is wrong.'
+Assert-True ($snapshot.Neighbors.Count -eq 1 -and $snapshot.Neighbors[0].RsrpDbm -eq -105 -and $snapshot.Neighbors[0].Band -eq 'B3/1800') 'WinRT neighbor fallback failed.'
+$script:atStatus = @{ Cells = @(); Neighbors = @(); TempC = $null; Rssnr = $null; Ca = $null }
+Assert-True ((Get-LteSnapshot $modem).Neighbors.Count -eq 0) 'An AT neighbor list (even empty) must take precedence.'
+Write-Output 'PASS: MBIM-spec signal units and WinRT neighbor fallback'
 
 # Commit samples through the same use case as both monitor loops.
 function Get-ModemSummary { return @{ Model = 'Test'; RatConfig = $null } }

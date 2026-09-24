@@ -38,12 +38,17 @@
 | --- | --- | --- |
 | Alert (赤) | 登録中の DataClass が 2G/3G 系 (Gprs/Edge/Umts/Hsdpa/Hsupa/Cdma*) のみで LTE/NR を含まない | WinRT `RegisteredDataClass` |
 | Alert (赤) | GSM/UMTS/TD-SCDMA/CDMA のサービングセルがある | WinRT `GetCellsInfoAsync()` |
-| Alert (赤) | XMCI に GSM/UMTS のサービングセル (TYPE 0/2) がある | `AT+XMCI=0` |
-| Warning (黄) | XMCI に GSM/UMTS の近隣セル (TYPE 1/3) がある | `AT+XMCI=0` |
+| Alert (赤) | AT のセル一覧に GSM/UMTS のサービングセルがある (XMCI では TYPE 0/2) | `AT+XMCI=0` (Quectel は `AT+QENG`、Fibocom GT は `AT+GTCCINFO?`) |
+| Warning (黄) | AT のセル一覧に GSM/UMTS の近隣セルがある (XMCI では TYPE 1/3) | 同上 |
+
+- 理由の末尾の `(XMCI)` / `(QENG)` / `(GTCCINFO)` は情報源のコマンド。5G NR のセルはダウングレード扱いしない。
+- ベンダー別のコマンドと RAT 設定の読み方は [modem-support.md](modem-support.md) を参照。
 
 - 一度でも検知したら、回数と最後の時刻・理由をセッション中ずっと表示する
   (`Add-DowngradeLog`、瞬間的なダウングレードの見落とし防止)。
-- 起動時に `AT+XACT?` を読み、2G/3G が許可されていれば `[2G/3G enabled: downgrade possible]` と常時表示する。
+- 起動時に RAT 設定 (L860-GL は `AT+XACT?`、Quectel は `AT+QNWPREFCFG="mode_pref"`、Fibocom GT は `AT+GTACT?`) を読み、
+  2G/3G が許可されていれば `[2G/3G enabled: downgrade possible]` と常時表示する。
+  Quectel の `AUTO` は WCDMA を含むため警告対象。
 
 ## 表示
 

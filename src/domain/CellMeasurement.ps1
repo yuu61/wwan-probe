@@ -24,9 +24,9 @@ function ConvertFrom-XmciNumber([string]$text) {
     return $null
 }
 
-# Returns cells from an AT+XMCI response as [pscustomobject]:
+# Returns cells from an AT+XMCI response as [pscustomobject] (the common AT cell shape, see AtProfile.ps1):
 #   Rat = GSM/UMTS/LTE, Role = Serving/Neighbor, Channel = ARFCN/UARFCN/EARFCN,
-#   and for LTE also Tac, CellId, Pci, Earfcn, RsrpIdx, RsrqIdx.
+#   and for LTE also Tac, CellId, Pci, Earfcn, RsrpDbm, RsrqDb (and the raw RsrpIdx, RsrqIdx).
 function ConvertFrom-XmciResponse([string]$Response) {
     $cells = @()
     foreach ($line in ($Response -split "`r?`n")) {
@@ -50,6 +50,8 @@ function ConvertFrom-XmciResponse([string]$Response) {
             $cell.Earfcn = ConvertFrom-XmciHex $f[6]
             $cell.RsrpIdx = [int]$f[9]
             $cell.RsrqIdx = [int]$f[10]
+            $cell.RsrpDbm = Convert-RsrpIndex $cell.RsrpIdx
+            $cell.RsrqDb = Convert-RsrqIndex $cell.RsrqIdx
         }
         $cells += [pscustomobject]$cell
     }

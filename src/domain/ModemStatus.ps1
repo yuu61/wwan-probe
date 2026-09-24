@@ -1,12 +1,37 @@
-# Domain: AT status response parsing (pure, no I/O).
+# Domain: AT status response parsing for Intel XMM modems (Fibocom L860-GL etc.) (pure, no I/O).
 # Reference: FIBOCOM L860 AT Commands User Manual V3.2.3 (see docs/neighbor-cells.md).
 # Every parser returns $null when the response is missing, "ERROR", or the value is invalid.
+# Get-AtResponseField / Get-AtResponseLine are shared by the other vendors' parsers.
 
 # Fields of the first "+<Name>: a,b,c" line, or $null.
 function Get-AtResponseField([string]$Response, [string]$Name) {
     if (-not $Response -or $Response -notmatch '(?m)^OK\s*$') { return $null }
     if ($Response -notmatch "(?m)^\+$([regex]::Escape($Name)):\s*(.+?)\s*$") { return $null }
     return , @($Matches[1] -split ',' | ForEach-Object { $_.Trim() })
+}
+
+# Fields of every "+<Name>: ..." line (quotes stripped), or $null when the response is not OK.
+# Lines of other commands and unprefixed lines are skipped.
+function Get-AtResponseLine([string]$Response, [string]$Name) {
+    if (-not $Response -or $Response -notmatch '(?m)^OK\s*$') { return $null }
+    $lines = @()
+    foreach ($m in [regex]::Matches($Response, "(?m)^\+$([regex]::Escape($Name)):\s*(.*?)\s*$")) {
+        $lines += , @($m.Groups[1].Value -split ',' | ForEach-Object { $_.Trim().Trim('"') })
+    }
+    return , $lines
+}
+
+# Integer from an AT field, or $null ("-", empty, or not a number). Accepts a "0x" hex prefix.
+function ConvertFrom-AtInt([string]$Text, [switch]$Hex) {
+    $Text = "$Text".Trim().Trim('"')
+    if ($Text -match '^0x([0-9A-Fa-f]+)$') { $Text = $Matches[1]; $Hex = $true }
+    $n = [long]0
+    if ($Hex) {
+        if ([long]::TryParse($Text, [Globalization.NumberStyles]::HexNumber, $null, [ref]$n)) { return $n }
+        return $null
+    }
+    if ([long]::TryParse($Text, [ref]$n)) { return $n }
+    return $null
 }
 
 # AT+MTSM=1 -> "+MTSM: <Temp>" (Celsius, -40..125)
@@ -73,5 +98,6 @@ function ConvertFrom-XactResponse([string]$Response) {
         GsmBands  = $gsm           # MHz values (900, 1800, ...)
         UmtsBands = $umts          # UTRA band numbers
         LteBands  = $lte           # E-UTRA band numbers
+        NrBands   = @()            # XMM 7560 is LTE only
     }
 }

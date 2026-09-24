@@ -10,7 +10,8 @@ function New-MonitorSampler {
                 param($SourceRoot)
                 foreach ($file in @(
                         'domain/Signal.ps1', 'domain/Band.ps1', 'domain/CellMeasurement.ps1',
-                        'domain/ModemStatus.ps1', 'domain/Downgrade.ps1',
+                        'domain/ModemStatus.ps1', 'domain/QuectelStatus.ps1', 'domain/FibocomStatus.ps1',
+                        'domain/AtProfile.ps1', 'domain/Downgrade.ps1',
                         'infrastructure/WinRt.ps1', 'infrastructure/Modem.ps1',
                         'infrastructure/PerfCounter.ps1', 'application/Snapshot.ps1'
                     )) { . (Join-Path $SourceRoot $file) }
@@ -29,12 +30,12 @@ function New-MonitorSampler {
 function Start-MonitorSample {
     # Starts a read-only measurement; no external state is changed.
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
-    param($Sampler, $Modem)
+    param($Sampler, $Modem, $At)
 
     if ($null -ne $Sampler.Pending) { throw 'A sample is already in progress.' }
     $Sampler.Pipeline.Commands.Clear()
     $Sampler.Pipeline.Streams.Error.Clear()
-    $null = $Sampler.Pipeline.AddCommand('Get-LteSnapshot').AddArgument($Modem)
+    $null = $Sampler.Pipeline.AddCommand('Get-LteSnapshot').AddArgument($Modem).AddArgument($At)
     $Sampler.Pending = $Sampler.Pipeline.BeginInvoke()
 }
 
