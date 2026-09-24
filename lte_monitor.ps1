@@ -15,7 +15,7 @@
 #
 # Entry point only: parse args, load src/, wire dependencies, pick the UI.
 # Layers (src/<layer>/*.ps1, lower layers never call upper ones):
-#   domain -> infrastructure -> application -> presentation
+#   domain rules <- infrastructure adapters / application use cases <- presentation
 
 param(
     [ValidateRange(0, 86400)][int]$Interval = 0,
@@ -24,32 +24,8 @@ param(
     [ValidatePattern('^(COM\d+)?$')][string]$AtPort = ''
 )
 
-# Load order matters. Dot-source at top level (not inside a function) so the
-# definitions land in this script's scope.
-$sources = @(
-    'domain\Signal.ps1'
-    'domain\Band.ps1'
-    'domain\CellMeasurement.ps1'
-    'domain\ModemStatus.ps1'
-    'domain\QuectelStatus.ps1'
-    'domain\FibocomStatus.ps1'
-    'domain\AtProfile.ps1'
-    'domain\Downgrade.ps1'
-    'infrastructure\WinRt.ps1'
-    'infrastructure\Modem.ps1'
-    'infrastructure\PerfCounter.ps1'
-    'infrastructure\CsvFile.ps1'
-    'application\Snapshot.ps1'
-    'application\SnapshotLog.ps1'
-    'application\MonitorSession.ps1'
-    'application\MonitorSampler.ps1'
-    'presentation\Gauge.ps1'
-    'presentation\Frame.ps1'
-    'presentation\ConsoleRenderer.ps1'
-    'presentation\PlainMonitor.ps1'
-    'presentation\TuiMonitor.ps1'
-)
-foreach ($src in $sources) { . (Join-Path $PSScriptRoot "src\$src") }
+# Shared composition root; definitions must load into this script's scope.
+. (Join-Path $PSScriptRoot 'src/Load.ps1')
 
 try { Import-WinRtProjection -LibDir (Join-Path $PSScriptRoot 'lib') }
 catch {

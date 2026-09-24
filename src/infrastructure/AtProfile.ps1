@@ -1,4 +1,4 @@
-# Domain: vendor AT command sets ("profiles") and their normalized results (pure, no I/O).
+# Infrastructure: vendor AT command sets ("profiles") and their normalized results (pure, no I/O).
 # The profile is chosen at startup by sending each Probe command in order; the first answered with
 # OK wins (Intel first, so the tested L860-GL path is unchanged). Probes are test commands ("=?"),
 # which do not depend on the registration state. Only Intel was verified on hardware.
@@ -98,7 +98,7 @@ function ConvertFrom-AtStatus($AtProfile, [hashtable]$Responses) {
 }
 
 # RAT / band configuration from the responses of $AtProfile.Config, or $null:
-#   Allowed (e.g. "3G+4G"), Preferred ($null = unknown), GsmBands (MHz), UmtsBands, LteBands, NrBands.
+#   AllowedRats (GSM/UMTS/LTE/NR), Allowed (e.g. "3G+4G"), Preferred ($null = unknown), GsmBands (MHz), UmtsBands, LteBands, NrBands.
 function ConvertFrom-AtConfig($AtProfile, [hashtable]$Responses) {
     switch ($AtProfile.Id) {
         'Intel' { return ConvertFrom-XactResponse $Responses['AT+XACT?'] }

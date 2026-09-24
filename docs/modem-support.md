@@ -26,7 +26,7 @@ MBIM の仕様 ([MB base stations information query support](https://learn.micro
 (詳細は [neighbor-cells.md](neighbor-cells.md) の 3.)。
 
 以前はインデックス値しか受け付けず、仕様どおり dBm を返すモデムではサービングセルが表示されませんでした。
-現在は `ConvertFrom-WinRtRsrp` / `ConvertFrom-WinRtRsrq` (`src/domain/Signal.ps1`) で両方を受け付けます。
+現在は `ConvertFrom-WinRtRsrp` / `ConvertFrom-WinRtRsrq` (`src/infrastructure/SignalConversion.ps1`) で両方を受け付けます。
 範囲が重ならないので区別できます。範囲外の値や `0xFFFFFFFF` は「値なし」として扱います。
 
 近隣セルは、AT で取れなかった場合に WinRT の `NeighboringCellsLte` を使います
@@ -70,7 +70,7 @@ MBIM の仕様 ([MB base stations information query support](https://learn.micro
 
 ## AT コマンドセット (プロファイル)
 
-経路が見つかったら、次の順でプローブを送り、`OK` が返った最初のプロファイルを使います (`src/domain/AtProfile.ps1`)。
+経路が見つかったら、次の順でプローブを送り、`OK` が返った最初のプロファイルを使います (`src/infrastructure/AtProfile.ps1`)。
 同じ Fibocom の経路でも、Intel 系 (L850 / L860) と MediaTek 系 (FM350) ではコマンドが異なるため、モデル名ではなく応答で判定します。
 
 | プロファイル | プローブ | 毎回の取得 | 起動時 (RAT / バンド) | 近隣セル・2G/3G の出典 | 状態 |
@@ -87,7 +87,7 @@ MBIM の仕様 ([MB base stations information query support](https://learn.micro
 ### Quectel
 
 出典: [Quectel RG50xQ&RM5xxQ Series AT Commands Manual V1.2](https://quectel.com/content/uploads/2024/05/Quectel_RG50xQRM5xxQ_Series_AT_Commands_Manual_V1.2.pdf)
-(5.12 `QSINR`、5.20 `QENG`、5.21 `QCAINFO`、5.25 `QNWPREFCFG`、12.5 `QTEMP`)。パーサーは `src/domain/QuectelStatus.ps1`。
+(5.12 `QSINR`、5.20 `QENG`、5.21 `QCAINFO`、5.25 `QNWPREFCFG`、12.5 `QTEMP`)。パーサーは `src/infrastructure/QuectelStatus.ps1`。
 
 | 値 | 取得元 | 解釈 |
 | --- | --- | --- |
@@ -105,7 +105,7 @@ MBIM の仕様 ([MB base stations information query support](https://learn.micro
 ### Fibocom GT (FM350-GL など MediaTek 系)
 
 出典: [FM350 AT Commands User Manual V2.10](https://www.minipc.de/support_db/support_files/Fibocom_FM350_AT%20Commands%20User%20Manual_V2.10.pdf)
-(11.1.14 `GTACT`、11.1.15 `GTCCINFO`、11.1.16 `GTCAINFO`、18.3 `GTSENRDTEMP`)。パーサーは `src/domain/FibocomStatus.ps1`。
+(11.1.14 `GTACT`、11.1.15 `GTCCINFO`、11.1.16 `GTCAINFO`、18.3 `GTSENRDTEMP`)。パーサーは `src/infrastructure/FibocomStatus.ps1`。
 
 | 値 | 取得元 | 解釈 |
 | --- | --- | --- |

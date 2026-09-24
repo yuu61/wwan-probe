@@ -2,11 +2,7 @@
 # Use a real sampling runspace and simulated console input/output.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
-foreach ($file in @(
-        'src/application/MonitorSession.ps1', 'src/application/MonitorSampler.ps1',
-        'src/application/SnapshotLog.ps1', 'src/infrastructure/CsvFile.ps1',
-        'src/presentation/Frame.ps1', 'src/presentation/TuiMonitor.ps1'
-    )) { . (Join-Path $root $file) }
+. (Join-Path $root 'src/Load.ps1')
 
 function Assert-True($Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
@@ -37,7 +33,7 @@ function New-TestSampler([int]$DelayMs = 600) {
             function Get-LteSnapshot($Modem) {
                 Start-Sleep -Milliseconds $TestDelayMs
                 [pscustomobject]@{
-                    Timestamp = 'test'; Serving = @([pscustomobject]@{ RsrpDbm = -90; RsrqDb = -10 })
+                    Timestamp = 'test'; Serving = @(); PrimaryCell = [pscustomobject]@{ RsrpDbm = -90; RsrqDb = -10 }; SecondaryCells = @()
                     Rssnr = 10; RxKB = 1; TxKB = 2; TempC = 30; Downgrade = $null
                 }
             }

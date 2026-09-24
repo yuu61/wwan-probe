@@ -24,6 +24,11 @@ function Format-OptionalValue($Value, [string]$Format) {
     return ($Format -f $Value)
 }
 
+function Format-TrafficRate($ValueKB) {
+    if ($null -eq $ValueKB) { return 'n/a' }
+    return Format-SiValue ($ValueKB * 1024) 'B/s'
+}
+
 # $Ca: @{ Cells; BandwidthsMHz } (ConvertFrom-AtStatus)
 function Format-CarrierAggregation($Ca) {
     if ($null -eq $Ca) { return 'n/a' }
@@ -320,7 +325,7 @@ function Get-MonitorFrame {
     }
     else {
         $legacyBands = @($rat.GsmBands | ForEach-Object { "$_" }) + @($rat.UmtsBands | ForEach-Object { "B$_" })
-        $legacyAllowed = $rat.Allowed -match '2G|3G'
+        $legacyAllowed = $summary.LegacyAllowed
         $ratText = " RAT: $($rat.Allowed)"
         if ($rat.Preferred) { $ratText += " (prefer $($rat.Preferred))" }
         if ($legacyAllowed) { $ratText += "   2G/3G bands: $($legacyBands -join ' ')   [2G/3G enabled: downgrade possible]" }
@@ -337,8 +342,9 @@ function Get-MonitorFrame {
     }
     else {
         $lines.Add((New-FrameLine " $($snapshot.ProviderName) ($($snapshot.ProviderId)) | $($snapshot.DataClass) | APN: $($snapshot.Apn)"))
-        $lines.Add((New-FrameLine (' BW: {0} Mbps   RX: {1}   TX: {2}   Updated: {3}' -f $snapshot.BwMbps,
-                    (Format-SiValue ($snapshot.RxKB * 1024) 'B/s'), (Format-SiValue ($snapshot.TxKB * 1024) 'B/s'), $snapshot.Timestamp)))
+        $lines.Add((New-FrameLine (' BW: {0}   RX: {1}   TX: {2}   Updated: {3}' -f (Format-OptionalValue $snapshot.BwMbps '{0} Mbps'),
+                    (Format-TrafficRate $snapshot.RxKB), (Format-TrafficRate $snapshot.TxKB), $snapshot.Timestamp)))
+        if ($snapshot.TrafficError) { $lines.Add((New-FrameLine " Traffic: $($snapshot.TrafficError)" 'DarkYellow')) }
         $lines.Add((New-FrameLine (' Temp: {0}   RSSNR: {1}   CA: {2}' -f
                     (Format-OptionalValue $snapshot.TempC '{0} C'), (Format-OptionalValue $snapshot.Rssnr '{0:0.0} dB'),
                     (Format-CarrierAggregation $snapshot.Ca))))
@@ -351,7 +357,9 @@ function Get-MonitorFrame {
         foreach ($c in $snapshot.Serving) {
             $color = Get-QualityColor $c.Quality
             $bar = Get-RsrpBar $c.RsrpDbm
-            $lines.Add((New-FrameLine " $bar RSRP: $($c.RsrpDbm) dBm  RSRQ: $($c.RsrqDb) dB  [$($c.Quality)]" $color))
+            $lines.Add((New-FrameLine (' {0} RSRP: {1}  RSRQ: {2}  [{3}]' -f $bar,
+                        (Format-OptionalValue $c.RsrpDbm '{0} dBm'), (Format-OptionalValue $c.RsrqDb '{0} dB'),
+                        (Format-OptionalValue $c.Quality '{0}')) $color))
             $lines.Add((New-FrameLine " $($c.Band) | EARFCN:$($c.Earfcn) | PCI:$($c.Pci) | CellID:$($c.CellId) | TAC:$($c.Tac) | TA:$($c.Ta) | MNC:$($c.Provider)"))
         }
 

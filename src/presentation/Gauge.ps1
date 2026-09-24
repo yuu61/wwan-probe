@@ -3,7 +3,8 @@
 # Redirected (plain) output keeps ASCII: under the default console code page
 # (e.g. CP932) the block glyphs would turn into '?'.
 
-function Get-RsrpBar([int]$dbm) {
+function Get-RsrpBar($dbm) {
+    if ($null -eq $dbm) { return '[        n/a         ]' }
     # Visual bar: -140 to -44 dBm mapped to 0-20 chars
     $normalized = [math]::Max(0, [math]::Min(20, [int](($dbm + 140) / 4.8)))
     $filled = '#' * $normalized
@@ -97,6 +98,7 @@ function Get-BlockSparkline([double[]]$Values, [double]$Min, [double]$Max, [int]
 }
 
 function Get-QualityColor([string]$Quality) {
+    if (-not $Quality) { return 'DarkGray' }
     switch ($Quality) {
         'Excellent' { return 'Green' }
         'Good' { return 'Cyan' }

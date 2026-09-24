@@ -1,14 +1,14 @@
 # Hardware-free regression checks: pwsh -NoProfile -File tests/Handover.Tests.ps1
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
-foreach ($file in @(
-        'src/domain/Signal.ps1', 'src/domain/Band.ps1', 'src/domain/Downgrade.ps1',
-        'src/application/Snapshot.ps1', 'src/application/MonitorSession.ps1',
-        'src/presentation/Gauge.ps1', 'src/presentation/Frame.ps1', 'src/presentation/TuiMonitor.ps1'
-    )) { . (Join-Path $root $file) }
+. (Join-Path $root 'src/Load.ps1')
 
 function Assert-True($Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
+}
+
+function Add-TestHandover($Log, $Snapshot) {
+    Add-HandoverLog -Log $Log -Cell $Snapshot.PrimaryCell -Timestamp $Snapshot.Timestamp -ObservationFailed ([bool]$Snapshot.Error)
 }
 
 function New-TestSnapshot([long]$CellId = 100, [string]$Provider = '44010') {
@@ -24,28 +24,28 @@ function New-TestSnapshot([long]$CellId = 100, [string]$Provider = '44010') {
 
 $log = New-HandoverLog -MaxEntries 3
 $sample = New-TestSnapshot
-Add-HandoverLog $log $sample
+Add-TestHandover $log $sample
 Assert-True ($log.Count -eq 0) 'Initial observation must not be a handover.'
 $sample.PrimaryCell.Pci = 11
 $sample.PrimaryCell.Tac = 21
 $sample.PrimaryCell.RsrpDbm = -100
-Add-HandoverLog $log $sample
+Add-TestHandover $log $sample
 Assert-True ($log.Count -eq 0) 'Metadata changes must not be counted.'
 $next = New-TestSnapshot 200
-Add-HandoverLog $log $next
+Add-TestHandover $log $next
 Assert-True ($log.Count -eq 1 -and $log.Entries[0].From.CellId -eq 100 -and $log.Entries[0].To.CellId -eq 200) 'Cell change was not recorded.'
 Assert-True ($log.Entries[0].From.RsrpDbm -eq -100 -and $log.Entries[0].Timestamp -eq $next.Timestamp) 'Event must use the latest preceding measurement and detection time.'
 $next.PrimaryCell.CellId = 999
 Assert-True ($log.Entries[0].To.CellId -eq 200) 'Recorded event was mutated.'
-Add-HandoverLog $log (New-TestSnapshot 200 '44020')
-Add-HandoverLog $log (New-TestSnapshot 100)
-Add-HandoverLog $log (New-TestSnapshot 200)
+Add-TestHandover $log (New-TestSnapshot 200 '44020')
+Add-TestHandover $log (New-TestSnapshot 100)
+Add-TestHandover $log (New-TestSnapshot 200)
 Assert-True ($log.Count -eq 4 -and $log.Entries.Count -eq 3 -and $log.Entries[0].Number -eq 2) 'PLMN changes, return transitions or retention failed.'
 Write-Output 'PASS: initial baseline, identity, metadata, immutable events, return transitions and bounded retention'
 
 foreach ($kind in 'error', 'absent', 'invalid', 'missing-id', 'missing-provider') {
     $log = New-HandoverLog
-    Add-HandoverLog $log (New-TestSnapshot)
+    Add-TestHandover $log (New-TestSnapshot)
     $gap = New-TestSnapshot 200
     switch ($kind) {
         error { $gap.Error = 'sample failed' }
@@ -54,10 +54,10 @@ foreach ($kind in 'error', 'absent', 'invalid', 'missing-id', 'missing-provider'
         missing-id { $gap.PrimaryCell.CellId = $null }
         missing-provider { $gap.PrimaryCell.Provider = '' }
     }
-    Add-HandoverLog $log $gap
-    Add-HandoverLog $log (New-TestSnapshot 300)
+    Add-TestHandover $log $gap
+    Add-TestHandover $log (New-TestSnapshot 300)
     Assert-True ($log.Count -eq 0) "Gap '$kind' produced a false handover."
-    Add-HandoverLog $log (New-TestSnapshot 400)
+    Add-TestHandover $log (New-TestSnapshot 400)
     Assert-True ($log.Count -eq 1) "Detection did not resume after '$kind'."
 }
 Write-Output 'PASS: errors, missing cells and invalid identities reset the baseline'
@@ -81,14 +81,14 @@ $modem = @{ CurrentNetwork = @{ RegisteredProviderId = '44010'; RegisteredDataCl
 $log = New-HandoverLog
 $snapshot = Get-LteSnapshot $modem
 Assert-True (-not $snapshot.Error -and $snapshot.PrimaryCell.CellId -eq 100 -and $null -eq $snapshot.PrimaryCell.RsrpDbm) 'Unmeasured primary identity was lost.'
-Add-HandoverLog $log $snapshot
+Add-TestHandover $log $snapshot
 $secondary.CellId = 300
-Add-HandoverLog $log (Get-LteSnapshot $modem)
+Add-TestHandover $log (Get-LteSnapshot $modem)
 $script:cells.ServingCellsLte = @($primary)
-Add-HandoverLog $log (Get-LteSnapshot $modem)
+Add-TestHandover $log (Get-LteSnapshot $modem)
 Assert-True ($log.Count -eq 0) 'CA secondary changes produced a false handover.'
 $primary.CellId = 400
-Add-HandoverLog $log (Get-LteSnapshot $modem)
+Add-TestHandover $log (Get-LteSnapshot $modem)
 Assert-True ($log.Count -eq 1) 'Primary change with missing RSRP was not detected.'
 Write-Output 'PASS: snapshot identity is independent of RSRP and CA secondary cells'
 
@@ -151,7 +151,7 @@ Write-Output 'PASS: sample integration, compact frame, details, keyboard navigat
 # Device header for a non-Intel modem: AT line, RAT without a preferred RAT, NR bands, AUTO warning.
 $view.HandoverVisible = $false
 $session.Summary = [pscustomobject]@{
-    Model = 'RM520N-GL'; Firmware = 'x'; Imei = ''; SimIccId = ''; SimSpn = ''; RadioState = 'On'; DataClass = 'Lte'
+    LegacyAllowed = $true; Model = 'RM520N-GL'; Firmware = 'x'; Imei = ''; SimIccId = ''; SimSpn = ''; RadioState = 'On'; DataClass = 'Lte'
     At = [pscustomobject]@{ Channel = [pscustomobject]@{ Name = 'Quectel QDU' }; Profile = [pscustomobject]@{ Name = 'Quectel (+Q commands)' }; Error = $null }
     RatConfig = [pscustomobject]@{ Allowed = '3G+4G+5G (AUTO)'; Preferred = $null; GsmBands = @(); UmtsBands = @(1, 8); LteBands = @(1, 3); NrBands = @(78) }
 }
@@ -163,7 +163,9 @@ $session.Summary.At = [pscustomobject]@{ Channel = $null; Profile = $null; Error
 $session.Summary.RatConfig = $null
 $frame = Get-MonitorFrame $session $view 80
 Assert-True (($frame.Body.Text -join "`n") -match 'AT: unavailable \(no AT channel \(4 MBIM services tried\)\)') 'Missing AT reason.'
-Assert-True (@($frame.Body.Text | Where-Object { $_.Length -gt 80 }).Count -eq 0) 'Header lines must fit 80 columns.'
+# Only device header lines are under test; histories are now retained for every sample.
+$headerEnd = [array]::FindIndex([string[]]$frame.Body.Text, [Predicate[string]] { param($line) $line -like '-- Network *' })
+Assert-True (@($frame.Body.Text | Select-Object -First $headerEnd | Where-Object { $_.Length -gt 80 }).Count -eq 0) 'Header lines must fit 80 columns.'
 Write-Output 'PASS: device header for other vendors and missing AT'
 
 # RX / TX share one log scale while both are shown; a chart shown alone keeps its own.

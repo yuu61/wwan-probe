@@ -1,4 +1,4 @@
-# Domain: AT+XMCI (Measured Cell Information) response parsing (pure, no I/O).
+# Infrastructure: AT+XMCI (Measured Cell Information) response parsing (pure, no I/O).
 # Fibocom L860-GL AT command manual 9.1.13:
 #   TYPE 0/1 (GSM serving/neighbor):  <TYPE>,<MCC>,<MNC>,<LAC>,<CI>,<BSIC>,<RXLEV>,<BER>,<ARFCN>,<TARELIABILITY>,<TA>
 #   TYPE 2/3 (UMTS serving/neighbor): <TYPE>,<MCC>,<MNC>,<LAC>,<CI>,<PSC>,<DLUARFCN>,<ULUARFCN>,<PATHLOSS>,<RSSI>,<RSCP>,<ECNO>

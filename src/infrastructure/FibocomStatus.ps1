@@ -1,4 +1,4 @@
-# Domain: AT status response parsing for Fibocom "GT" command modems (FM350-GL, MediaTek T700) (pure, no I/O).
+# Infrastructure: AT status response parsing for Fibocom "GT" command modems (FM350-GL, MediaTek T700) (pure, no I/O).
 # Reference: FM350 AT Commands User Manual V2.10 (see docs/modem-support.md). Number bases of
 # +GTCCINFO fields were taken from real FM350 output (TAC / cell ID hex, EARFCN / PCI decimal).
 # Not verified on hardware. Every parser returns $null when the response is missing or "ERROR".
@@ -102,6 +102,7 @@ function ConvertFrom-GtactResponse([string]$Response) {
     $f = Get-AtResponseField $Response 'GTACT'
     if ($null -eq $f -or $f.Count -lt 1) { return $null }
     $rats = @{ 1 = '3G'; 2 = '4G'; 4 = '3G+4G'; 10 = '3G+4G+5G (Auto)'; 14 = '5G'; 16 = '3G+5G'; 17 = '4G+5G'; 20 = '3G+4G+5G' }
+    $ratSets = @{ 1 = @('UMTS'); 2 = @('LTE'); 4 = @('UMTS', 'LTE'); 10 = @('UMTS', 'LTE', 'NR'); 14 = @('NR'); 16 = @('UMTS', 'NR'); 17 = @('LTE', 'NR'); 20 = @('UMTS', 'LTE', 'NR') }
     $prefs = @{ 2 = '3G'; 3 = '4G'; 6 = '5G' }
     $rat = ConvertFrom-AtInt $f[0]
     if ($null -eq $rat -or -not $rats.ContainsKey([int]$rat)) { return $null }
@@ -115,11 +116,12 @@ function ConvertFrom-GtactResponse([string]$Response) {
         elseif ($n -lt 100) { $umts += [int]$n }
     }
     return [pscustomobject]@{
-        Allowed   = $rats[[int]$rat]
-        Preferred = if ($null -ne $pref -and $prefs.ContainsKey([int]$pref)) { $prefs[[int]$pref] }
-        GsmBands  = @()
-        UmtsBands = $umts
-        LteBands  = $lte
-        NrBands   = $nr
+        AllowedRats = $ratSets[[int]$rat]
+        Allowed     = $rats[[int]$rat]
+        Preferred   = if ($null -ne $pref -and $prefs.ContainsKey([int]$pref)) { $prefs[[int]$pref] }
+        GsmBands    = @()
+        UmtsBands   = $umts
+        LteBands    = $lte
+        NrBands     = $nr
     }
 }

@@ -1,4 +1,4 @@
-# Domain: AT status response parsing for Intel XMM modems (Fibocom L860-GL etc.) (pure, no I/O).
+# Infrastructure: AT status response parsing for Intel XMM modems (Fibocom L860-GL etc.) (pure, no I/O).
 # Reference: FIBOCOM L860 AT Commands User Manual V3.2.3 (see docs/neighbor-cells.md).
 # Every parser returns $null when the response is missing, "ERROR", or the value is invalid.
 # Get-AtResponseField / Get-AtResponseLine are shared by the other vendors' parsers.
@@ -80,8 +80,9 @@ function ConvertFrom-XactResponse([string]$Response) {
     $f = Get-AtResponseField $Response 'XACT'
     if ($null -eq $f -or $f.Count -lt 4) { return $null }
     $modes = @('2G', '3G', '4G', '2G+3G', '3G+4G', '2G+4G', '2G+3G+4G')
+    $modeRats = @{ 0 = @('GSM'); 1 = @('UMTS'); 2 = @('LTE'); 3 = @('GSM', 'UMTS'); 4 = @('UMTS', 'LTE'); 5 = @('GSM', 'LTE'); 6 = @('GSM', 'UMTS', 'LTE') }
     $act = 0
-    if (-not [int]::TryParse($f[0], [ref]$act) -or $act -ge $modes.Count) { return $null }
+    if (-not [int]::TryParse($f[0], [ref]$act) -or $act -lt 0 -or $act -ge $modes.Count) { return $null }
     $preferred = 0
     $preferredText = if ([int]::TryParse($f[1], [ref]$preferred) -and $preferred -lt $modes.Count) { $modes[$preferred] } else { $null }
     $gsm = @(); $umts = @(); $lte = @()
@@ -93,11 +94,12 @@ function ConvertFrom-XactResponse([string]$Response) {
         elseif ($n -gt 0) { $umts += $n }
     }
     return [pscustomobject]@{
-        Allowed   = $modes[$act]   # e.g. "3G+4G"
-        Preferred = $preferredText
-        GsmBands  = $gsm           # MHz values (900, 1800, ...)
-        UmtsBands = $umts          # UTRA band numbers
-        LteBands  = $lte           # E-UTRA band numbers
-        NrBands   = @()            # XMM 7560 is LTE only
+        AllowedRats = $modeRats[$act]
+        Allowed     = $modes[$act]   # e.g. "3G+4G"
+        Preferred   = $preferredText
+        GsmBands    = $gsm           # MHz values (900, 1800, ...)
+        UmtsBands   = $umts          # UTRA band numbers
+        LteBands    = $lte           # E-UTRA band numbers
+        NrBands     = @()            # XMM 7560 is LTE only
     }
 }

@@ -159,10 +159,11 @@ OK
 | ファイル | 内容 |
 | --- | --- |
 | `src/infrastructure/Modem.ps1` | `Find-ModemAtChannel`: 起動時に AT の経路 (Intel AT Tunnel など) を探す。`Invoke-ModemAtCommand`: 1 つのセッションで複数コマンドを順に送り、`@{ コマンド = 応答文字列 }` を返す |
-| `src/domain/CellMeasurement.ps1` | `ConvertFrom-XmciResponse`: `+XMCI:` 行をセルのオブジェクトに変換 |
-| `src/domain/ModemStatus.ps1` | `+MTSM` / `+XCESQ` / `+XLEC` / `+XACT` の応答パーサー |
-| `src/domain/AtProfile.ps1` | ベンダー別のコマンドセット (Intel は `AT+XMCI=?` の応答で判定) と、応答から近隣セル・温度・RSSNR・CA へのまとめ |
-| `src/application/Snapshot.ps1` | `Initialize-ModemAt`: 起動時に経路とコマンドセットを判定。`Get-AtStatus`: 毎回の更新で近隣セル・温度・RSSNR・CA を取得。`Get-ModemSummary`: 有効 LTE バンドを起動時に 1 回取得 |
+| `src/infrastructure/CellMeasurement.ps1` | `ConvertFrom-XmciResponse`: `+XMCI:` 行をセルのオブジェクトに変換 |
+| `src/infrastructure/ModemStatus.ps1` | `+MTSM` / `+XCESQ` / `+XLEC` / `+XACT` の応答パーサー |
+| `src/infrastructure/AtProfile.ps1` | ベンダー別のコマンドセット (Intel は `AT+XMCI=?` の応答で判定) と、応答から近隣セル・温度・RSSNR・CA へのまとめ |
+| `src/infrastructure/ModemObservation.ps1` | `Initialize-ModemAt`: 起動時に経路とコマンドセットを判定。`Get-AtStatus`: 近隣セル・温度・RSSNR・CA を取得。`Get-ModemDeviceSummary`: 有効 LTE バンドを起動時に 1 回取得。`Get-ModemObservation`: WinRT と AT の結果を正規化 |
+| `src/application/Snapshot.ps1` | `Get-LteSnapshot`: 主セル・副セルを確定し、ドメインの信号評価・ダウングレード判定を適用。`Get-ModemSummary`: RAT 設定から 2G/3G 許可の判定結果を作成 |
 | `src/presentation/Frame.ps1` | `LTE bands` 行、`Temp / RSSNR / CA` 行、Neighbors セクションの表示。RSSNR (`SNR`) と温度 (`Temp`) は History にもグラフ表示 |
 
 - PowerShell は CsWinRT の `IBuffer` を引数・戻り値として正しく扱えない

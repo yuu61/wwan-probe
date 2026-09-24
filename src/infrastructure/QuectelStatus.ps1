@@ -1,4 +1,4 @@
-# Domain: AT status response parsing for Quectel (Qualcomm based) modems (pure, no I/O).
+# Infrastructure: AT status response parsing for Quectel (Qualcomm based) modems (pure, no I/O).
 # Reference: Quectel RG50xQ&RM5xxQ Series AT Commands Manual V1.2 (see docs/modem-support.md).
 # Not verified on hardware. Every parser returns $null when the response is missing, "ERROR",
 # or carries no usable value. Values "-" mean invalid. Cells use the common AT cell shape (AtProfile.ps1).
@@ -155,16 +155,20 @@ function ConvertFrom-QnwprefcfgResponse([hashtable]$Responses) {
     if (-not $mode) { return $null }
     # GSM is not in the RM5xx manual; mapped so a module that lists it still gets the 2G warning.
     $names = @{ GSM = '2G'; WCDMA = '3G'; LTE = '4G'; NR5G = '5G' }
+    $ratNames = @{ GSM = 'GSM'; WCDMA = 'UMTS'; LTE = 'LTE'; NR5G = 'NR' }
+    $allowedRats = if ($mode -eq 'AUTO') { @('UMTS', 'LTE', 'NR') }
+    else { @($mode -split ':' | ForEach-Object { if ($ratNames[$_]) { $ratNames[$_] } else { $_ } }) }
     $allowed = if ($mode -eq 'AUTO') { '3G+4G+5G (AUTO)' }
     else { (@($mode -split ':' | ForEach-Object { if ($names[$_]) { $names[$_] } else { $_ } }) | Sort-Object) -join '+' }
     $bands = { param($name) @((& $value $name) -split ':' | ForEach-Object { ConvertFrom-AtInt $_ } | Where-Object { $null -ne $_ }) }
     return [pscustomobject]@{
-        Allowed   = $allowed
-        Preferred = $null
-        GsmBands  = @()
+        AllowedRats = @($allowedRats)
+        Allowed     = $allowed
+        Preferred   = $null
+        GsmBands    = @()
         # @() keeps a single band or none an array (a script block's output is unrolled).
-        UmtsBands = @(& $bands 'gw_band')
-        LteBands  = @(& $bands 'lte_band')
-        NrBands   = @(& $bands 'nr5g_band')
+        UmtsBands   = @(& $bands 'gw_band')
+        LteBands    = @(& $bands 'lte_band')
+        NrBands     = @(& $bands 'nr5g_band')
     }
 }

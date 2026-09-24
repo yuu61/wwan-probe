@@ -33,6 +33,7 @@
 ## 検知ルール (`src/domain/Downgrade.ps1`)
 
 毎回の更新で次を評価する。
+WinRT の DataClass は infrastructure で GSM / UMTS / CDMA / LTE / NR に正規化し、domain はその RAT の一覧を評価する。
 
 | レベル | 条件 | 情報源 |
 | --- | --- | --- |
@@ -50,11 +51,12 @@
 - 起動時に RAT 設定 (L860-GL は `AT+XACT?`、Quectel は `AT+QNWPREFCFG="mode_pref"`、Fibocom GT は `AT+GTACT?`) を読み、
   2G/3G が許可されていれば `[2G/3G enabled: downgrade possible]` と常時表示する。
   Quectel の `AUTO` は WCDMA を含むため警告対象。
+  判定には正規化した `AllowedRats` を使い、`Allowed` の表示文言は参照しない。
 
 ## 表示
 
 ```text
- !! 2G/3G DOWNGRADE: registered on Umts/Hsdpa; UMTS serving ch:10900 (XMCI)     <- 赤 (現在)
+ !! 2G/3G DOWNGRADE: registered on UMTS; UMTS serving ch:10900 (XMCI)           <- 赤 (現在)
  !  2G/3G cells visible: UMTS neighbor ch:10900 (XMCI)                           <- 黄 (現在)
  !  2G/3G seen earlier (alert 1 / warning 0 samples), last 2026-09-24 15:00:00 [Alert]: ...  <- 過去
  RAT: 3G+4G (prefer 4G)   2G/3G bands: B1 B2 B4 B5 B8   [2G/3G enabled: downgrade possible]

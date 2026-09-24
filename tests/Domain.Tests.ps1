@@ -1,13 +1,8 @@
-# Hardware-free checks for the pure domain parsers: pwsh -NoProfile -File tests/Domain.Tests.ps1
+# Hardware-free checks for adapters and domain rules: pwsh -NoProfile -File tests/Domain.Tests.ps1
 # Fixtures quote the manuals / real output where noted; "synthetic" ones are built from the documented layout.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
-foreach ($file in @(
-        'src/domain/Signal.ps1', 'src/domain/Band.ps1', 'src/domain/CellMeasurement.ps1',
-        'src/domain/ModemStatus.ps1', 'src/domain/QuectelStatus.ps1', 'src/domain/FibocomStatus.ps1',
-        'src/domain/AtProfile.ps1', 'src/domain/Downgrade.ps1', 'src/infrastructure/WinRt.ps1',
-        'src/infrastructure/Modem.ps1'
-    )) { . (Join-Path $root $file) }
+. (Join-Path $root 'src/Load.ps1')
 
 function Assert-True($Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
@@ -82,6 +77,8 @@ Assert-Equal 0 @((ConvertFrom-AtStatus (Get-AtProfile 'Intel') $intel).Neighbors
 # Shortened real response (the recorded one lists more bands).
 $rat = ConvertFrom-AtConfig (Get-AtProfile 'Intel') @{ 'AT+XACT?' = New-AtResponse '+XACT: 4,2,1,1,2,4,5,8,101,103,118,141,171' }
 Assert-Equal '3G+4G' $rat.Allowed 'XACT allowed'
+Assert-Equal @('UMTS', 'LTE') $rat.AllowedRats 'XACT normalized RATs'
+Assert-True (Test-LegacyRatAllowed $rat.AllowedRats) 'XACT legacy capability'
 Assert-Equal @(1, 3, 18, 41, 71) $rat.LteBands 'XACT LTE bands'
 Write-Output 'PASS: Intel XMM profile (L860-GL responses)'
 
@@ -152,6 +149,8 @@ $prefs = @{
 }
 $rat = ConvertFrom-AtConfig (Get-AtProfile 'Quectel') $prefs
 Assert-True ($rat.Allowed -match '3G') 'AUTO must report 3G as allowed'
+Assert-Equal @('UMTS', 'LTE', 'NR') $rat.AllowedRats 'Quectel AUTO normalized RATs'
+Assert-True (Test-LegacyRatAllowed $rat.AllowedRats) 'Quectel AUTO legacy capability'
 Assert-Equal @(1, 3, 8) $rat.LteBands 'Quectel LTE bands'
 Assert-Equal 11 @($rat.NrBands).Count 'Quectel NR bands'
 Assert-Equal 10 @($rat.UmtsBands).Count 'Quectel WCDMA bands'
@@ -162,6 +161,7 @@ $prefs['AT+QNWPREFCFG="lte_band"'] = New-AtResponse '+QNWPREFCFG: "lte_band",3'
 $prefs['AT+QNWPREFCFG="nr5g_band"'] = "ERROR`r`n"
 $rat = ConvertFrom-AtConfig (Get-AtProfile 'Quectel') $prefs
 Assert-Equal '2G+4G' $rat.Allowed 'Quectel GSM is 2G'
+Assert-Equal @('GSM', 'LTE') $rat.AllowedRats 'Quectel GSM normalized RATs'
 Assert-True ($rat.LteBands -is [array] -and $rat.NrBands -is [array] -and $rat.NrBands.Count -eq 0) 'Quectel band lists must stay arrays'
 Write-Output 'PASS: Quectel profile (RM5xx manual examples)'
 
@@ -199,6 +199,8 @@ $fibocom.Remove('AT+GTCAINFO?')
 Assert-Equal @(20) (ConvertFrom-AtStatus (Get-AtProfile 'FibocomGt') $fibocom).Ca.BandwidthsMHz 'Fibocom single carrier without GTCAINFO'
 $rat = ConvertFrom-AtConfig (Get-AtProfile 'FibocomGt') @{ 'AT+GTACT?' = New-AtResponse '+GTACT: 17,6,,101,103,5078,50257,1' }
 Assert-Equal '4G+5G' $rat.Allowed 'GTACT NR/LTE'
+Assert-Equal @('LTE', 'NR') $rat.AllowedRats 'GTACT normalized RATs'
+Assert-True (-not (Test-LegacyRatAllowed $rat.AllowedRats)) 'GTACT LTE/NR must not warn'
 Assert-Equal '5G' $rat.Preferred 'GTACT preferred NR'
 Assert-Equal @(1, 3) $rat.LteBands 'GTACT LTE bands'
 Assert-Equal @(78, 257) $rat.NrBands 'GTACT NR bands ("50" + n)'
@@ -211,12 +213,16 @@ $cells = @(
     [pscustomobject]@{ Rat = 'NR'; Role = 'Serving'; Channel = 627264 }
     [pscustomobject]@{ Rat = 'UMTS'; Role = 'Neighbor'; Channel = 10700 }
 )
-$finding = Get-DowngradeFinding -RegisteredDataClass 'Lte' -LegacyServingCount 0 -AtCells $cells -AtSource 'QENG'
+$finding = Get-DowngradeFinding -RegisteredRats @('LTE') -LegacyServingCount 0 -AtCells $cells -AtSource 'QENG'
 Assert-Equal 'Warning' $finding.Level 'UMTS neighbor is a warning'
 Assert-Equal 'UMTS neighbor ch:10700 (QENG)' ($finding.Reasons -join ';') 'NR must not be reported; source label'
-$finding = Get-DowngradeFinding -RegisteredDataClass 'Lte' -LegacyServingCount 0 -AtCells $wcdma -AtSource 'QENG'
+$finding = Get-DowngradeFinding -RegisteredRats @('LTE') -LegacyServingCount 0 -AtCells $wcdma -AtSource 'QENG'
 Assert-Equal 'Alert' $finding.Level 'UMTS serving is an alert'
-Write-Output 'PASS: downgrade detection with vendor cell lists'
+Assert-Equal @('UMTS') (ConvertFrom-WinRtDataClass 'Umts, Hsdpa, Hsupa') 'WinRT flags normalize to one RAT'
+Assert-Equal @('LTE', 'NR') (ConvertFrom-WinRtDataClass 'Lte, NewRadioNonStandalone') 'WinRT modern RATs'
+Assert-Equal 'Alert' (Get-DowngradeFinding -RegisteredRats @('UMTS') -LegacyServingCount 0).Level 'Registered legacy RAT'
+Assert-Equal 'None' (Get-DowngradeFinding -RegisteredRats @('UMTS', 'LTE') -LegacyServingCount 0).Level 'Mixed modern registration flags'
+Write-Output 'PASS: downgrade detection with normalized registration and vendor cell lists'
 
 # MBIM AT framing (libmbim: Intel/Fibocom/Compal raw "<cmd>\r\n"; Quectel QDU UINT32 type + command)
 Assert-Equal @(65, 84, 13, 10) (ConvertTo-MbimAtRequest 'Crlf' 'AT') 'CRLF framing'
@@ -261,7 +267,6 @@ Write-Output 'PASS: WinRT wait with one resend'
 
 # Startup detection (Initialize-ModemAt / Find-ModemAtChannel) with a simulated modem.
 # $script:mockAt maps a channel name to { param($command) <response or $null> }; other channels throw.
-. (Join-Path $root 'src/application/Snapshot.ps1')
 function Invoke-ModemAtCommand($Modem, $Channel, [string[]]$Command, [int]$TimeoutMs = 3000) {
     $handler = $script:mockAt[$Channel.Name]
     if ($null -eq $handler) { throw "$($Channel.Name) device service not available" }

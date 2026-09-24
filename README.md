@@ -74,17 +74,24 @@ TUI (Text User Interface) 画面起動中は以下のキー操作が可能です
 CA の副セルの追加・削除、信号強度や TAC だけの変化は数えません。初回取得、取得失敗・圏外・識別情報不明の後は比較基準を設定し直します。
 測定間のセル変更を観測するため、セル再選択と通信中のハンドオーバーは区別できず、測定間隔内の切り替えをすべて捕捉できるものではありません。
 
+主セルの信号値が取得できない場合も、セルの識別情報は保持します。画面・信号履歴・CSV・ハンドオーバー判定は同じ主セルを使い、CA の副セルを代用しません。
+取得不能な測定値は画面では `n/a`、CSV では空欄、履歴グラフでは欠測として扱います。通信量の実測ゼロは `0 B/s` と表示し、カウンター取得失敗は画面と CSV の `Error` 列に理由を記録します。
+LTE セルを取得できない回も履歴の位置を残し、取得できた温度などのモデム全体の測定値は保持します。
+
 （標準入出力がリダイレクトされている場合は、プレーンテキストによる逐次出力にフォールバックします）
 
 ## ディレクトリ構成 (`src/`)
 
 本ツールは Domain-Driven Design (DDD) 風のレイヤードアーキテクチャを採用しており、`src/` 以下がそれぞれの責務に分割されています。
-(上位レイヤーのスクリプトは下位レイヤーを呼び出しますが、逆はありません)
+domain は他のレイヤーに依存せず、application が infrastructure の取得結果にドメインルールを適用します。presentation はその結果を表示します。
 
-- **`domain/`** : ドメインモデルとルール (`Signal.ps1`, `Downgrade.ps1`, `CellMeasurement.ps1` など)
-- **`infrastructure/`** : ハードウェアや OS との通信 (`Modem.ps1`, `WinRt.ps1`, `PerfCounter.ps1`, `CsvFile.ps1` など)
-- **`application/`** : アプリケーションロジック (`MonitorSession.ps1`, `Snapshot.ps1` など)
+- **`domain/`** : 信号の評価・統計、ダウングレード判定、セル同一性とハンドオーバー履歴 (`Signal.ps1`, `Downgrade.ps1`, `Handover.ps1` など)
+- **`infrastructure/`** : ハードウェア・OS・CSV との入出力、AT 経路の検出、ベンダー別パーサーと WinRT 値の正規化 (`ModemObservation.ps1`, `AtProfile.ps1`, `SignalConversion.ps1` など)
+- **`application/`** : 主セル・副セルを明示した snapshot の作成、セッション更新、履歴・CSV の連携と測定の実行管理 (`MonitorSession.ps1`, `Snapshot.ps1`, `MonitorSampler.ps1` など)
 - **`presentation/`** : ユーザーインターフェース (`TuiMonitor.ps1`, `ConsoleRenderer.ps1`, `Gauge.ps1` など)
+
+`src/Load.ps1` が共通のロード構成を管理します。エントリーポイントは全体を、測定 runspace は `-Components Core` で表示以外の共通部分を読み込みます。
+RAT の許可設定は `AllowedRats` (GSM / UMTS / LTE / NR) と表示文言を分け、2G/3G 許可の判定結果を application から画面に渡します。
 
 ## ドキュメント
 

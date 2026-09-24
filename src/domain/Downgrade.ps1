@@ -4,31 +4,24 @@
 # In Japan no carrier runs 2G, and all 3G networks were shut down by 2026-03-31
 # (au 2022-03, SoftBank 2024-07, docomo FOMA 2026-03), so any 2G/3G cell there is suspect.
 
-# WinRT DataClasses flag names that mean 2G/3G (GSM/UMTS/CDMA families).
-$script:LegacyDataClassNames = @(
-    'Gprs', 'Edge', 'Umts', 'Hsdpa', 'Hsupa',
-    'Cdma1xRtt', 'Cdma1xEvdo', 'Cdma1xEvdoRevA', 'Cdma1xEvdv', 'Cdma3xRtt', 'Cdma1xEvdoRevB', 'CdmaUmb'
-)
-
-# Legacy flag names in a DataClasses string such as "Umts, Hsdpa" (empty when none).
-function Get-LegacyDataClass([string]$DataClass) {
-    $names = @($DataClass -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-    return , @($names | Where-Object { $script:LegacyDataClassNames -contains $_ })
+# Capability rule over normalized RAT identities, independent of display labels.
+function Test-LegacyRatAllowed([string[]]$AllowedRats) {
+    return @($AllowedRats | Where-Object { $_ -in 'GSM', 'UMTS', 'CDMA' }).Count -gt 0
 }
 
 # Evaluates one sample. Returns:
 #   Level   = 'Alert' (registered/serving on 2G/3G), 'Warning' (2G/3G cells visible) or 'None'
 #   Reasons = human readable evidence
-# $RegisteredDataClass: WinRT RegisteredDataClass string
+# $RegisteredRats:      normalized registered RAT identities (GSM/UMTS/CDMA/LTE/NR)
 # $LegacyServingCount:  WinRT GSM/UMTS/CDMA serving cells
 # $AtCells:             common AT cells (AtProfile.ps1, e.g. from AT+XMCI) ($null when unavailable)
 # $AtSource:            label of the AT cell list shown in the reasons (e.g. 'XMCI')
-function Get-DowngradeFinding([string]$RegisteredDataClass, [int]$LegacyServingCount, $AtCells, [string]$AtSource = 'AT') {
+function Get-DowngradeFinding([string[]]$RegisteredRats, [int]$LegacyServingCount, $AtCells, [string]$AtSource = 'AT') {
     $alert = @()
     $warning = @()
 
-    $legacyClass = Get-LegacyDataClass $RegisteredDataClass
-    $hasModern = $RegisteredDataClass -match 'Lte|NewRadio'
+    $legacyClass = @($RegisteredRats | Where-Object { $_ -in 'GSM', 'UMTS', 'CDMA' })
+    $hasModern = @($RegisteredRats | Where-Object { $_ -in 'LTE', 'NR' }).Count -gt 0
     if ($legacyClass.Count -gt 0 -and -not $hasModern) {
         $alert += "registered on $($legacyClass -join '/')"
     }

@@ -8,13 +8,7 @@ function New-MonitorSampler {
     try {
         $null = $pipeline.AddScript({
                 param($SourceRoot)
-                foreach ($file in @(
-                        'domain/Signal.ps1', 'domain/Band.ps1', 'domain/CellMeasurement.ps1',
-                        'domain/ModemStatus.ps1', 'domain/QuectelStatus.ps1', 'domain/FibocomStatus.ps1',
-                        'domain/AtProfile.ps1', 'domain/Downgrade.ps1',
-                        'infrastructure/WinRt.ps1', 'infrastructure/Modem.ps1',
-                        'infrastructure/PerfCounter.ps1', 'application/Snapshot.ps1'
-                    )) { . (Join-Path $SourceRoot $file) }
+                . (Join-Path $SourceRoot 'Load.ps1') -Components Core
             }).AddArgument((Split-Path $PSScriptRoot -Parent))
         $null = $pipeline.Invoke()
         if ($pipeline.Streams.Error.Count -gt 0) { throw $pipeline.Streams.Error[0] }

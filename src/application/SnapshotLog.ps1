@@ -1,7 +1,7 @@
 # Application: snapshot -> CSV logging (column order is part of the output contract).
 #
 # One row per sample, including samples without an LTE serving cell (cell columns empty),
-# so gaps stay visible. Cell columns are the primary serving cell (Serving[0]); CA secondary
+# so gaps stay visible. Cell columns are PrimaryCell; CA SecondaryCells
 # cells are '+'-joined lists in the SCell_* columns. Unavailable values are empty.
 
 $script:SnapshotLogColumns = @(
@@ -29,12 +29,13 @@ function Add-SnapshotLog([string]$Path, $Snapshot) {
 # Snapshot -> @{ column = value } for $script:SnapshotLogColumns (missing key = empty field).
 function ConvertTo-SnapshotLogRow($Snapshot) {
     $join = { param($items) if (@($items).Count -gt 0) { @($items) -join '+' } }
-    $pcell = $Snapshot.Serving | Select-Object -First 1
-    $scells = @($Snapshot.Serving | Select-Object -Skip 1)
+    $pcell = $Snapshot.PrimaryCell
+    $scells = @($Snapshot.SecondaryCells)
 
     $errors = @()
     if ($Snapshot.Error) { $errors += "WinRT: $($Snapshot.Error)" }
     if ($Snapshot.AtError) { $errors += "AT: $($Snapshot.AtError)" }
+    if ($Snapshot.TrafficError) { $errors += "Traffic: $($Snapshot.TrafficError)" }
 
     $row = @{
         Timestamp        = $Snapshot.Timestamp
