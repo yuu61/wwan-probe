@@ -11,11 +11,13 @@ function Invoke-AtProbe($Modem, $Channel, [string]$Command) {
     return $null
 }
 
-# Finds the AT channel and command set once at startup. Returns plain data (it crosses into the
-# sampler runspace): @{ Channel; Profile; Error } where Channel / Profile are $null when unavailable
-# and Error explains why. $AtPort ("COM7") uses that serial port instead of the MBIM services.
+# Finds the AT channel and command set once at startup (a failed detection needs a restart).
+# Returns plain data (it crosses into the sampler runspace): @{ Channel; Profile; Error; Tried }
+# where Channel / Profile are $null when unavailable, Error is a short reason for the screen and
+# Tried lists "<channel>: <reason>" per rejected MBIM service. $AtPort ("COM7") uses that serial
+# port instead of the MBIM services.
 function Initialize-ModemAt($Modem, [string]$AtPort) {
-    $at = [pscustomobject]@{ Channel = $null; Profile = $null; Error = $null }
+    $at = [pscustomobject]@{ Channel = $null; Profile = $null; Error = $null; Tried = @() }
     try {
         if ($AtPort) {
             $channel = New-SerialAtChannel $AtPort
@@ -25,10 +27,16 @@ function Initialize-ModemAt($Modem, [string]$AtPort) {
         else {
             $tried = [System.Collections.Generic.List[string]]::new()
             $at.Channel = Find-ModemAtChannel $Modem $tried
-            if ($null -eq $at.Channel) { throw "no AT channel ($($tried -join '; '))" }
+            $at.Tried = @($tried)
+            if ($null -eq $at.Channel) { throw "no AT channel ($($tried.Count) MBIM services tried)" }
         }
         foreach ($atProfile in $script:AtProfiles) {
             if ((Invoke-AtProbe $Modem $at.Channel -Command $atProfile.Probe) -match '(?m)^OK\s*$') { $at.Profile = $atProfile; break }
+        }
+        # The Intel AT Tunnel only exists on Intel XMM modems: keep the tested command set even when
+        # the probe was lost, as before profiles existed (each sample tolerates failed commands).
+        if ($null -eq $at.Profile -and $at.Channel.Name -eq 'Intel AT Tunnel') {
+            $at.Profile = $script:AtProfiles | Where-Object Id -EQ 'Intel'
         }
         if ($null -eq $at.Profile) { $at.Error = "unsupported AT command set on $($at.Channel.Name)" }
     }

@@ -147,3 +147,21 @@ $session.HandoverLog = New-HandoverLog
 $frame = Get-MonitorFrame $session $view 80
 Assert-True (($frame.Body.Text -join "`n") -match 'no LTE cell changes') 'Empty history is not explained.'
 Write-Output 'PASS: sample integration, compact frame, details, keyboard navigation, page bounds and empty history'
+
+# Device header for a non-Intel modem: AT line, RAT without a preferred RAT, NR bands, AUTO warning.
+$view.HandoverVisible = $false
+$session.Summary = [pscustomobject]@{
+    Model = 'RM520N-GL'; Firmware = 'x'; Imei = ''; SimIccId = ''; SimSpn = ''; RadioState = 'On'; DataClass = 'Lte'
+    At = [pscustomobject]@{ Channel = [pscustomobject]@{ Name = 'Quectel QDU' }; Profile = [pscustomobject]@{ Name = 'Quectel (+Q commands)' }; Error = $null }
+    RatConfig = [pscustomobject]@{ Allowed = '3G+4G+5G (AUTO)'; Preferred = $null; GsmBands = @(); UmtsBands = @(1, 8); LteBands = @(1, 3); NrBands = @(78) }
+}
+$text = (Get-MonitorFrame $session $view 80).Body.Text -join "`n"
+Assert-True ($text -match 'AT: Quectel QDU / Quectel \(\+Q commands\)') 'AT channel/profile line missing.'
+Assert-True ($text -match 'RAT: 3G\+4G\+5G \(AUTO\)   2G/3G bands: B1 B8   \[2G/3G enabled' -and $text -notmatch 'prefer') 'AUTO must warn and omit an unknown preferred RAT.'
+Assert-True ($text -match 'LTE bands: B1 B3   NR bands: n78') 'NR bands missing.'
+$session.Summary.At = [pscustomobject]@{ Channel = $null; Profile = $null; Error = 'no AT channel (4 MBIM services tried)' }
+$session.Summary.RatConfig = $null
+$frame = Get-MonitorFrame $session $view 80
+Assert-True (($frame.Body.Text -join "`n") -match 'AT: unavailable \(no AT channel \(4 MBIM services tried\)\)') 'Missing AT reason.'
+Assert-True (@($frame.Body.Text | Where-Object { $_.Length -gt 80 }).Count -eq 0) 'Header lines must fit 80 columns.'
+Write-Output 'PASS: device header for other vendors and missing AT'

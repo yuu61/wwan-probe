@@ -59,6 +59,10 @@ MBIM の仕様 ([MB base stations information query support](https://learn.micro
   L860-GL の COM ポートは ModemControl ドライバが占有しているため開けません ([neighbor-cells.md](neighbor-cells.md) の 2.)。
 - 実機 (L860-GL) で、プロセスが AT Tunnel を使い始めた直後に応答が 1 回返らない (タイムアウトする) ことがありました。
   起動時の判定 (`AT` とプローブ) はタイムアウトしたら 1 回だけ再送します。
+- 経路とコマンドセットの判定は**起動時に 1 回だけ**です。起動時にモデムが応答しなかった場合は、再起動するまで AT の値は取れません
+  (Intel AT Tunnel の場合を除く。下記)。
+- AT の経路がないモデムでは、各 MBIM サービスを 1.5 秒のタイムアウト (と 1 回の再送) で順に試すため、起動に数秒かかることがあります。
+  画面には `AT: unavailable (no AT channel (4 MBIM services tried))` と表示し、各サービスの失敗理由は `Summary.At.Tried` に残します。
 
 ## AT コマンドセット (プロファイル)
 
@@ -67,11 +71,14 @@ MBIM の仕様 ([MB base stations information query support](https://learn.micro
 
 | プロファイル | プローブ | 毎回の取得 | 起動時 (RAT / バンド) | 近隣セル・2G/3G の出典 | 状態 |
 | --- | --- | --- | --- | --- | --- |
-| Intel XMM | `AT+XLEC?` | `AT+MTSM=1`, `AT+XCESQ?`, `AT+XLEC?`, `AT+XMCI=0` | `AT+XACT?` | `XMCI` | **L860-GL で実機確認済み** |
+| Intel XMM | `AT+XMCI=?` | `AT+MTSM=1`, `AT+XCESQ?`, `AT+XLEC?`, `AT+XMCI=0` | `AT+XACT?` | `XMCI` | **L860-GL で実機確認済み** |
 | Quectel | `AT+QENG=?` | `AT+QTEMP`, `AT+QCAINFO`, `AT+QSINR`, `AT+QENG="servingcell"`, `AT+QENG="neighbourcell"` | `AT+QNWPREFCFG="mode_pref"` / `"gw_band"` / `"lte_band"` / `"nr5g_band"` | `QENG` | 仕様のみ |
 | Fibocom GT | `AT+GTCAINFO=?` | `AT+GTSENRDTEMP=1`, `AT+GTCAINFO?`, `AT+GTCCINFO?` | `AT+GTACT?` | `GTCCINFO` | 仕様のみ |
 
-どのプロファイルにも一致しない場合は `AT: unavailable (unsupported AT command set on ...)` と表示し、WinRT の値だけを使います。
+- プローブはテストコマンド (`=?`) で、登録状態に左右されない。L860-GL は `AT+XMCI=?` に `+XMCI: (0,1)` を返す。
+- Intel AT Tunnel は Intel XMM 系にしかないため、この経路でプローブが失敗した (応答が落ちた) 場合も Intel のコマンドセットを使う
+  (プロファイル導入前と同じく、毎回の取得で個々のコマンドの失敗を許容する)。
+- どのプロファイルにも一致しない場合は `AT: unavailable (unsupported AT command set on ...)` と表示し、WinRT の値だけを使います。
 
 ### Quectel
 
@@ -82,9 +89,9 @@ MBIM の仕様 ([MB base stations information query support](https://learn.micro
 | --- | --- | --- |
 | 近隣セル | `QENG="neighbourcell"` | LTE モードの `"neighbourcell intra"/"inter"` は `<earfcn>,<PCID>,<RSRQ>,<RSRP>` の順、WCDMA モードの `"neighbourcell","LTE"` は `<RSRP>,<RSRQ>` の順 (逆なので注意)。RSRP / RSRQ は dBm / dB。`-` は無効 |
 | 2G/3G | `QENG` の `"WCDMA"` / `"GSM"` のサービングセル・近隣セル | `Get-DowngradeFinding` に渡す |
-| SINR | `QCAINFO` の PCC `<RSSNR>` (dB、-10〜30)。なければ `QSINR` の PRX (dB、LTE のとき) | `QENG` の `<SINR>` は使わない: RM5xx の換算式 (`Y = 1/5 × X × 10 - 20`) と EC2x 系の定義 (1/5 dB 単位、`Y = X/5 - 20`) が食い違い、機種を特定できないため |
+| SINR | `QCAINFO` の PCC `<RSSNR>` (dB、-10〜30)。なければ `QSINR` の PRX (dB、LTE のとき) | `QENG` の `<SINR>` は使わない: RM5xx のマニュアルの換算式は `Y = 1/5 × X × 10 - 20` だが、EC2x 系は 1/5 dB 単位 (`Y = X/5 - 20`) とされていて食い違い、機種を特定できないため (EC2x 系の定義は検索結果の要約で確認しただけで、マニュアル本文は未確認) |
 | CA | `QCAINFO` (帯域幅はリソースブロック数 6/15/25/50/75/100 = 1.4〜20 MHz) | PCC と、`<scell_state>` が 0 (deconfigured) 以外の SCC を数える。`QCAINFO` が何も返さないときは `QENG` の LTE サービングセルから「1 セル」とする (`<DL_bandwidth>` は XLEC と同じ 0〜5 のインデックス) |
-| 温度 | `QTEMP` | 全センサーのうち最も高い値 (℃)。RM5xx は 1 行 1 センサー (`"<sensor>","<temp>"`)、EM12 / EG25 系は `<pmic>,<xo>,<pa>` の 1 行。範囲外 (-40〜125 以外) は無視 |
+| 温度 | `QTEMP` | 全センサーのうち最も高い値 (℃)。RM5xx は 1 行 1 センサー (`"<sensor>","<temp>"`)。EM12 / EG25 系は `<pmic>,<xo>,<pa>` の 1 行とされる (Quectel フォーラムの例 `+QTEMP: 30,28,27` による。マニュアル本文は未確認)。範囲外 (-40〜125 以外) は無視 |
 | RAT / バンド | `QNWPREFCFG` | `mode_pref` の `AUTO` は「WCDMA & LTE & 5G NR」なので `3G+4G+5G (AUTO)` と表示し、ダウングレード可能と警告する。優先 RAT は取得しない |
 
 - `QENG="servingcell"` は EN-DC のとき `"servingcell",<state>` 行と `"LTE",...` 行に分かれ、フィールド位置が 2 つずれる。

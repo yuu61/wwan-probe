@@ -2,15 +2,15 @@
 
 Windows のモバイルブロードバンド (WWAN) モデム向けの LTE 信号監視ツール (TUI) です。
 Windows の PowerShell 7.4 以降で動作します。
-実機で確認しているのは Fibocom L860-GL だけです。Quectel や Fibocom FM350 などは仕様上の対応です (`docs/modem-support.md` 参照)。
+実機で確認しているのは Fibocom L860-GL だけです。Quectel や Fibocom FM350 などは仕様上の対応です ([`docs/modem-support.md`](docs/modem-support.md) 参照)。
 
 ## 機能
 
 - **リアルタイム監視**: RSRP, RSRQ, SNR, 送受信レート, モデム温度の履歴グラフ表示
 - **詳細情報の取得**: CA (キャリアアグリゲーション) 情報、利用可能な LTE バンド、RAT 情報の取得
-- **2G/3G ダウングレード検知**: 偽基地局対策として、国内では利用されない 2G/3G へのダウングレードを検知して警告 (詳細は `docs/downgrade-detection.md` 参照)
-- **近隣セル情報の表示**: モデムの AT コマンド (L860-GL は MBIM の Intel AT Tunnel 経由の `AT+XMCI`) で近隣セル (Neighbor cells) の情報を取得・表示。AT で取れない場合は WinRT が報告する近隣セルを使用 (詳細は `docs/neighbor-cells.md` 参照)
-- **複数ベンダーの AT コマンド**: 起動時に AT の経路 (Intel / Fibocom / Compal / Quectel の MBIM サービス、または COM ポート) とコマンドセット (Intel `+X`、Quectel `+Q`、Fibocom `+GT`) を自動判定 (詳細は `docs/modem-support.md` 参照)
+- **2G/3G ダウングレード検知**: 偽基地局対策として、国内では利用されない 2G/3G へのダウングレードを検知して警告 (詳細は [`docs/downgrade-detection.md`](docs/downgrade-detection.md) 参照)
+- **近隣セル情報の表示**: モデムの AT コマンド (L860-GL は MBIM の Intel AT Tunnel 経由の `AT+XMCI`) で近隣セル (Neighbor cells) の情報を取得・表示。AT で取れない場合は WinRT が報告する近隣セルを使用 (詳細は [`docs/neighbor-cells.md`](docs/neighbor-cells.md) 参照)
+- **複数ベンダーの AT コマンド**: 起動時に AT の経路 (Intel / Fibocom / Compal / Quectel の MBIM サービス、または COM ポート) とコマンドセット (Intel `+X`、Quectel `+Q`、Fibocom `+GT`) を自動判定 (詳細は [`docs/modem-support.md`](docs/modem-support.md) 参照)
 - **ハンドオーバー履歴**: LTE 主セルの変更を検出し、時刻と切り替え先の Cell ID・バンド・PCI などを表示
 - **CSV ログ出力**: 取得した情報を CSV ファイルに記録可能
 

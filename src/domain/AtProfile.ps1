@@ -1,6 +1,7 @@
 # Domain: vendor AT command sets ("profiles") and their normalized results (pure, no I/O).
 # The profile is chosen at startup by sending each Probe command in order; the first answered with
-# OK wins (Intel first, so the tested L860-GL path is unchanged). Only Intel was verified on hardware.
+# OK wins (Intel first, so the tested L860-GL path is unchanged). Probes are test commands ("=?"),
+# which do not depend on the registration state. Only Intel was verified on hardware.
 #   Status = commands sent every sample (slowest / least important last: a timeout skips the rest)
 #   Config = commands sent once at startup for the RAT / band configuration
 #   Source = label of the cell list in 2G/3G downgrade reasons
@@ -10,7 +11,7 @@
 #   LTE cells also: Earfcn, Pci, RsrpDbm, RsrqDb ($null = not measured) and optionally Tac, CellId.
 $script:AtProfiles = @(
     [pscustomobject]@{
-        Id = 'Intel'; Name = 'Intel XMM (+X commands)'; Probe = 'AT+XLEC?'; Source = 'XMCI'
+        Id = 'Intel'; Name = 'Intel XMM (+X commands)'; Probe = 'AT+XMCI=?'; Source = 'XMCI'
         # XMCI=0 returns the stored measurements immediately; XMCI=1 waits for a fresh serving-cell
         # measurement and was seen to hang for >10 s on a weak cell.
         Status = @('AT+MTSM=1', 'AT+XCESQ?', 'AT+XLEC?', 'AT+XMCI=0')
