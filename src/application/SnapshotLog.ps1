@@ -15,6 +15,8 @@ $script:SnapshotLogColumns = @(
     'Temp_C'
     'Downgrade', 'Downgrade_Reason'
     'Error'
+    'GPS_Status', 'GPS_Source', 'GPS_Timestamp_UTC', 'GPS_Latitude', 'GPS_Longitude'
+    'GPS_Altitude_m', 'GPS_Accuracy_m', 'GPS_Speed_mps', 'GPS_Heading_deg', 'GPS_HDOP', 'GPS_Error'
 )
 
 function Initialize-SnapshotLog([string]$Path) {
@@ -38,24 +40,35 @@ function ConvertTo-SnapshotLogRow($Snapshot) {
     if ($Snapshot.TrafficError) { $errors += "Traffic: $($Snapshot.TrafficError)" }
 
     $row = @{
-        Timestamp        = $Snapshot.Timestamp
-        RSSNR_dB         = $Snapshot.Rssnr
-        Provider         = $Snapshot.ProviderId
-        DataClass        = $Snapshot.DataClass
-        CA_Cells         = $Snapshot.Ca.Cells
-        CA_BW_MHz        = & $join $Snapshot.Ca.BandwidthsMHz
-        SCell_Band       = & $join $scells.Band
-        SCell_EARFCN     = & $join $scells.Earfcn
-        SCell_PCI        = & $join $scells.Pci
-        SCell_RSRP_dBm   = & $join $scells.RsrpDbm
-        SCell_RSRQ_dB    = & $join $scells.RsrqDb
-        RX_KBps          = $Snapshot.RxKB
-        TX_KBps          = $Snapshot.TxKB
-        BW_Mbps          = $Snapshot.BwMbps
-        Temp_C           = $Snapshot.TempC
-        Downgrade        = $Snapshot.Downgrade.Level
-        Downgrade_Reason = @($Snapshot.Downgrade.Reasons) -join '; '
-        Error            = $errors -join '; '
+        Timestamp         = $Snapshot.Timestamp
+        RSSNR_dB          = $Snapshot.Rssnr
+        Provider          = $Snapshot.ProviderId
+        DataClass         = $Snapshot.DataClass
+        CA_Cells          = $Snapshot.Ca.Cells
+        CA_BW_MHz         = & $join $Snapshot.Ca.BandwidthsMHz
+        SCell_Band        = & $join $scells.Band
+        SCell_EARFCN      = & $join $scells.Earfcn
+        SCell_PCI         = & $join $scells.Pci
+        SCell_RSRP_dBm    = & $join $scells.RsrpDbm
+        SCell_RSRQ_dB     = & $join $scells.RsrqDb
+        RX_KBps           = $Snapshot.RxKB
+        TX_KBps           = $Snapshot.TxKB
+        BW_Mbps           = $Snapshot.BwMbps
+        Temp_C            = $Snapshot.TempC
+        Downgrade         = $Snapshot.Downgrade.Level
+        Downgrade_Reason  = @($Snapshot.Downgrade.Reasons) -join '; '
+        Error             = $errors -join '; '
+        GPS_Status        = $Snapshot.Gps.Status
+        GPS_Source        = $Snapshot.Gps.Source
+        GPS_Timestamp_UTC = $Snapshot.Gps.Timestamp
+        GPS_Latitude      = $Snapshot.Gps.Latitude
+        GPS_Longitude     = $Snapshot.Gps.Longitude
+        GPS_Altitude_m    = $Snapshot.Gps.AltitudeM
+        GPS_Accuracy_m    = $Snapshot.Gps.AccuracyM
+        GPS_Speed_mps     = $Snapshot.Gps.SpeedMps
+        GPS_Heading_deg   = $Snapshot.Gps.HeadingDeg
+        GPS_HDOP          = $Snapshot.Gps.Hdop
+        GPS_Error         = $Snapshot.Gps.Error
     }
     if ($pcell) {
         $row.RSRP_dBm = $pcell.RsrpDbm

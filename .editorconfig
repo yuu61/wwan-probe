@@ -1,0 +1,27 @@
+root = true
+
+# C# sources compiled by PowerShell Add-Type; checked by tool.ps1 lint / format
+# through tools/csharp/WwanProbe.csproj.
+[*.cs]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# Existing style: explicit types, block-scoped namespaces, usings outside the namespace.
+csharp_style_var_for_built_in_types = false:warning
+csharp_style_var_when_type_is_apparent = false:warning
+csharp_style_var_elsewhere = false:warning
+csharp_style_namespace_declarations = block_scoped:warning
+csharp_using_directive_placement = outside_namespace:warning
+dotnet_sort_system_directives_first = true
+
+# Formatting (IDE0055) and unnecessary usings (IDE0005) fail lint as well as format -Check.
+dotnet_diagnostic.IDE0055.severity = warning
+dotnet_diagnostic.IDE0005.severity = warning
+
+# Add-Type does not run source generators, so LibraryImport and GeneratedRegex cannot be used.
+dotnet_diagnostic.SYSLIB1054.severity = none
+dotnet_diagnostic.SYSLIB1045.severity = none

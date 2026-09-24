@@ -1,0 +1,34 @@
+<!-- Lint-only project for the C# sources that PowerShell compiles with Add-Type at run time.
+     Nothing here is built for the tool itself; see tool.ps1 lint / format. -->
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- PowerShell 7.4 (the minimum) runs on .NET 8 and its Add-Type compiles C# 12,
+         the default language version of net8.0. -->
+    <TargetFramework>net8.0</TargetFramework>
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+    <OutputType>Library</OutputType>
+    <!-- Add-Type has no implicit usings and no nullable context. -->
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- Required for IDE0005 (unnecessary usings) on build; the sources have no XML docs. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../src/**/*.cs;../../diagnostics/**/*.cs" />
+    <!-- Same WinRT projection that setup.ps1 extracts and Gps.ps1 references. -->
+    <Reference Include="../../lib/Microsoft.Windows.SDK.NET.dll" />
+    <Reference Include="../../lib/WinRT.Runtime.dll" />
+    <!-- The tool runs only on Windows 10+; CA1416 still flags APIs newer than this. -->
+    <AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatformAttribute">
+      <_Parameter1>windows10.0.10240.0</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+</Project>

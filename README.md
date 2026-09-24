@@ -12,6 +12,7 @@ Windows の PowerShell 7.4 以降で動作します。
 - **近隣セル情報の表示**: モデムの AT コマンド (L860-GL は MBIM の Intel AT Tunnel 経由の `AT+XMCI`) で近隣セル (Neighbor cells) の情報を取得・表示。AT で取れない場合は WinRT が報告する近隣セルを使用 (詳細は [`docs/neighbor-cells.md`](docs/neighbor-cells.md) 参照)
 - **複数ベンダーの AT コマンド**: 起動時に AT の経路 (Intel / Fibocom / Compal / Quectel の MBIM サービス、または COM ポート) とコマンドセット (Intel `+X`、Quectel `+Q`、Fibocom `+GT`) を自動判定 (詳細は [`docs/modem-support.md`](docs/modem-support.md) 参照)
 - **ハンドオーバー履歴**: LTE 主セルの変更を検出し、時刻と切り替え先の Cell ID・バンド・PCI などを表示
+- **GPS / GNSS 表示**: `-Gps` で衛星測位の緯度・経度・高度・精度・速度・方位・HDOP / PDOP / VDOP・測位時刻を表示。未測位や取得不能も表示。`-Nmea` で捕捉衛星の一覧 (衛星系ごとに色分け、仰角・方位角・SNR・測位への使用) と、受信機の測位状態 (2D / 3D・測位品質・測位モード・使用衛星数・海抜高度とジオイド高) も表示 (詳細は [`docs/gps.md`](docs/gps.md) 参照)
 - **CSV ログ出力**: 取得した情報を CSV ファイルに記録可能
 
 ## 必須要件
@@ -38,8 +39,10 @@ PowerShell 7.4+ がインストールされている環境で、初回のみ Win
 以下のスクリプトを実行して TUI モニターを起動します。
 
 ```powershell
-.\lte_monitor.ps1 [-Interval <秒>] [-Count <回数>] [-CsvPath "log.csv"] [-AtPort COM7]
+.\lte_monitor.ps1 [-Interval <秒>] [-Count <回数>] [-CsvPath "log.csv"] [-AtPort COM7] [-Gps] [-Nmea]
 ```
+
+オプション名は大文字・小文字を区別しません。存在しないオプション (綴りの誤りを含む) を指定するとエラーで終了します。
 
 ### 引数 (オプション)
 
@@ -47,6 +50,14 @@ PowerShell 7.4+ がインストールされている環境で、初回のみ Win
 - `-Count`: 測定回数。デフォルトは `0` で無限ループします。
 - `-CsvPath`: 指定すると、結果を CSV ファイルにログ出力します。
 - `-AtPort`: AT コマンドを MBIM ではなく指定の COM ポート (例: `COM7`) で送ります。ベンダードライバが AT ポートを公開しているモデム向けです。省略時は MBIM の AT サービスを自動で探します。
+- `-Gps`: Windows の GNSS ドライバー経路で衛星測位を取得します。GPS 以外 (Wi-Fi・基地局・IP 等) の座標は表示・記録しません。Windows の位置情報サービスとデスクトップアプリの位置情報アクセスを有効にしてください。API の制約により特定のモデムは選択できません。省略時は GPS を取得しません。
+- `-Nmea`: `-Gps` に加えて、GNSS ドライバーの NMEA から捕捉衛星の一覧を取得します。`-Nema` とも書けます。ドライバーが管理者権限を要求するため、起動時に UAC で受信用のヘルパープロセスだけを昇格します (管理者ターミナルでは確認なし)。UAC を拒否しても LTE と GPS 欄の監視は続きます。衛星一覧は CSV には記録しません。
+
+GPS を表示し、LTE 測定と一緒に CSV へ記録する例:
+
+```powershell
+.\lte_monitor.ps1 -Gps -CsvPath "log.csv"
+```
 
 ### TUI での操作
 
@@ -59,6 +70,7 @@ TUI (Text User Interface) 画面起動中は以下のキー操作が可能です
 - `1`〜`6` : 各ヒストリーグラフの表示・非表示 (1:RSRP, 2:RSRQ, 3:SNR, 4:RX, 5:TX, 6:Temp)
 - `g` : 全グラフの一括表示切り替え
 - `h` : ハンドオーバー履歴の詳細一覧 / 通常画面を切り替え。詳細一覧では `↑` / `↓` で新しい / 古い履歴へ移動
+- `s` : 衛星一覧 / 通常画面を切り替え (`-Nmea` 指定時)。一覧では `↑` / `↓` でスクロール。`h` の一覧とは排他
 - `↑` / `↓` : ヒストリーグラフの高さ (行数) を増減 (1〜10 行、既定 2 行。1 行あたり 8 段階。Temp は常にその 1/2 (切り捨て、最低 1 行))
 
 `LTE bands:` の各バンドは、最新の接続中セルと近隣セルの合計に応じて明るく表示します。0 個は従来の暗いグレー、1 個以上は表示対象バンドの最多セル数を白として RGB グラデーションで表示します。例えば B1 が 1 個、B18 が 2 個なら B1 は中間グレー (`#909090`)、B18 は白 (`#FFFFFF`) になります。最多が 1 個なら観測されたバンドはすべて白です。同じ EARFCN・PCI のセルは重複して数えません。物理的な基地局の台数ではなく、現在観測できるセル数を表し、測定ごとに明度を更新します。
@@ -95,6 +107,22 @@ domain は他のレイヤーに依存せず、application が infrastructure の
 `src/Load.ps1` が共通のロード構成を管理します。エントリーポイントは全体を、測定 runspace は `-Components Core` で表示以外の共通部分を読み込みます。
 RAT の許可設定は `AllowedRats` (GSM / UMTS / LTE / NR) と表示文言を分け、2G/3G 許可の判定結果を application から画面に渡します。
 
+## 開発
+
+`tool.ps1` で PowerShell と C# (`Add-Type` で実行時にコンパイルする `src/`・`diagnostics/` の `.cs`) のリント・整形を行います。
+
+```powershell
+.\tool.ps1 lint           # PSScriptAnalyzer と Roslyn Analyzers
+.\tool.ps1 format         # Invoke-Formatter と dotnet format (whitespace / style) で整形
+.\tool.ps1 format -Check  # 整形が必要なファイルの報告のみ (変更しない)
+```
+
+- 必要なもの: PSScriptAnalyzer モジュール、.NET 10 SDK、`.\setup.ps1` で展開した `lib\` の DLL
+- `global.json` で SDK を 10.0.x (インストール済みの最新の 10.0 系) に固定しています。`tool.ps1` はリポジトリ直下で `dotnet` を実行するので、どのディレクトリから呼んでもこの指定が効きます
+- C# は検査専用のプロジェクト `tools/csharp/WwanProbe.csproj` 経由で検査します。実行時には使いません。検査対象は PowerShell 7.4 (.NET 8) の `Add-Type` に合わせて net8.0 (C# 12)、implicit usings と nullable は無効です
+- Roslyn Analyzers は .NET 10 SDK 同梱のもの (`AnalysisLevel` = `latest-recommended`) を使い、警告もエラーとして扱います。書式やコードスタイルの設定は `.editorconfig` にあります
+- `format` はアナライザーのコード修正 (`dotnet format analyzers`) を適用しません。動作が変わる修正もあるため、`lint` で報告して手で直します
+
 ## ドキュメント
 
 より詳細な技術情報については `docs/` 以下の Markdown ファイルを参照してください。
@@ -102,3 +130,4 @@ RAT の許可設定は `AllowedRats` (GSM / UMTS / LTE / NR) と表示文言を�
 - [2G/3G ダウングレード検知](docs/downgrade-detection.md)
 - [近隣セル (Neighbors) の取得方法](docs/neighbor-cells.md)
 - [対応モデム (L860-GL 以外)](docs/modem-support.md)
+- [GPS / GNSS の取得と表示](docs/gps.md)
