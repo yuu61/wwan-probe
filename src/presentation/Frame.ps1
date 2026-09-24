@@ -49,8 +49,10 @@ function Add-DowngradeLine([System.Collections.Generic.List[object]]$Lines, $Fin
 }
 
 # History charts in display order. Key = toggle key in the TUI, History = Session.History name.
-# Scale: @{ Step; MinSpan; Floor; Ceiling } for Get-AutoScale, or @{ ZeroBased; MinMax } for
-# Get-ZeroBasedScale. StepUnit = unit of a value difference (dBm differences are dB).
+# Scale: @{ Step; MinSpan; Floor; Ceiling } for Get-AutoScale, or @{ Log; Floor } for
+# Get-LogScale. StepUnit = unit of a value difference (dBm differences are dB).
+# ValueFactor (optional) converts the history values into Unit; Si = format values with
+# SI prefixes (Format-SiValue).
 $script:HistoryCharts = @(
     [pscustomobject]@{ Key = '1'; Label = 'RSRP'; History = 'Rsrp'; Unit = 'dBm'; StepUnit = 'dB'; Color = 'DarkGreen'; Visible = $true
         Scale = @{ Step = 5; MinSpan = 10; Floor = -140; Ceiling = -44 }
@@ -61,11 +63,11 @@ $script:HistoryCharts = @(
     [pscustomobject]@{ Key = '3'; Label = 'SNR'; History = 'Rssnr'; Unit = 'dB'; StepUnit = 'dB'; Color = 'DarkCyan'; Visible = $true
         Scale = @{ Step = 5; MinSpan = 10; Floor = -50; Ceiling = 50 }
     }
-    [pscustomobject]@{ Key = '4'; Label = 'RX'; History = 'RxKB'; Unit = 'KB/s'; StepUnit = 'KB/s'; Color = 'DarkMagenta'; Visible = $false
-        Scale = @{ ZeroBased = $true; MinMax = 10 }
+    [pscustomobject]@{ Key = '4'; Label = 'RX'; History = 'RxKB'; Unit = 'B/s'; StepUnit = 'B/s'; Color = 'DarkMagenta'; Visible = $false
+        ValueFactor = 1024; Si = $true; Scale = @{ Log = $true; Floor = 100 }
     }
-    [pscustomobject]@{ Key = '5'; Label = 'TX'; History = 'TxKB'; Unit = 'KB/s'; StepUnit = 'KB/s'; Color = 'Magenta'; Visible = $false
-        Scale = @{ ZeroBased = $true; MinMax = 10 }
+    [pscustomobject]@{ Key = '5'; Label = 'TX'; History = 'TxKB'; Unit = 'B/s'; StepUnit = 'B/s'; Color = 'Magenta'; Visible = $false
+        ValueFactor = 1024; Si = $true; Scale = @{ Log = $true; Floor = 100 }
     }
     [pscustomobject]@{ Key = '6'; Label = 'Temp'; History = 'TempC'; Unit = 'C'; StepUnit = 'C'; Color = 'DarkRed'; Visible = $false
         Scale = @{ Step = 5; MinSpan = 10; Floor = -40; Ceiling = 125 }; RowsRatio = 0.5
@@ -118,6 +120,18 @@ function Format-AxisValue([double]$Value) {
     return '{0:0.##}' -f $Value
 }
 
+# Value with an SI prefix (k/M/G, 1000 steps) and at most 3 significant digits:
+# 1234 'B/s' -> "1.23 kB/s". Without $Unit it fits 5 columns for axis labels: "1.23k".
+function Format-SiValue([double]$Value, [string]$Unit = '') {
+    $prefixes = '', 'k', 'M', 'G'
+    $i = 0
+    while ($i -lt $prefixes.Count - 1 -and [math]::Abs($Value) -ge 999.5 * [math]::Pow(1000, $i)) { $i++ }
+    $scaled = $Value / [math]::Pow(1000, $i)
+    $format = if ([math]::Abs($scaled) -lt 10) { '{0:0.##}' } elseif ([math]::Abs($scaled) -lt 100) { '{0:0.#}' } else { '{0:0}' }
+    if ($Unit) { return ($format -f $scaled) + ' ' + $prefixes[$i] + $Unit }
+    return ($format -f $scaled) + $prefixes[$i]
+}
+
 # Appends one history chart (sparkline rows + stats line) to $Lines.
 # The scale is computed from the visible (most recent) samples only; its bounds are
 # shown as the axis labels. Stats cover the whole history.
@@ -128,13 +142,19 @@ function Add-HistoryChart {
     )
     $headWidth = 12
     $sparkWidth = [math]::Max(10, $Width - $headWidth - 4)
+    if ($Chart.ValueFactor) { $Values = [double[]]@($Values | ForEach-Object { $_ * $Chart.ValueFactor }) }
     $visible = @($Values | Select-Object -Last $sparkWidth)
     $scale = $Chart.Scale
-    $range = if ($scale.ZeroBased) { Get-ZeroBasedScale -Values $visible -MinMax $scale.MinMax } else { Get-AutoScale -Values $visible @scale }
-    $maxText = Format-AxisValue $range.Max
-    $minText = Format-AxisValue $range.Min
+    $range = if ($scale.Log) { Get-LogScale -Values $visible -Floor $scale.Floor } else { Get-AutoScale -Values $visible @scale }
+    $maxText = if ($Chart.Si) { Format-SiValue $range.Max } else { Format-AxisValue $range.Max }
+    $minText = if ($Chart.Si) { Format-SiValue $range.Min } else { Format-AxisValue $range.Min }
+    # Log charts plot log10(v); the axis labels keep the original values.
+    $plot = [pscustomobject]@{ Values = $visible; Min = $range.Min; Max = $range.Max }
+    if ($scale.Log) {
+        $plot = [pscustomobject]@{ Values = (ConvertTo-LogValue $visible $range.Min); Min = [math]::Log10($range.Min); Max = [math]::Log10($range.Max) }
+    }
     if ($Unicode) {
-        $sparkRows = @(Get-BlockSparkline $visible $range.Min $range.Max $sparkWidth $Rows)
+        $sparkRows = @(Get-BlockSparkline $plot.Values $plot.Min $plot.Max $sparkWidth $Rows)
         $last = $sparkRows.Count - 1
         for ($r = 0; $r -le $last; $r++) {
             # Axis labels: max on the top row, min on the bottom row (a single row shows only the label).
@@ -142,15 +162,21 @@ function Add-HistoryChart {
             $label = if ($r -eq 0) { $Chart.Label } else { '' }
             $Lines.Add((New-FrameLine ((' {0,-5}{1,5} |{2}|' -f $label, $axis, $sparkRows[$r])) $Chart.Color))
         }
-        $scaleText = '{0:0.##} {1}/level' -f (($range.Max - $range.Min) / (8 * $sparkRows.Count)), $Chart.StepUnit
+        $scaleText = if ($scale.Log) { 'log, {0:0.#} levels/decade' -f (8 * $sparkRows.Count / ($plot.Max - $plot.Min)) }
+        else { '{0:0.##} {1}/level' -f (($range.Max - $range.Min) / (8 * $sparkRows.Count)), $Chart.StepUnit }
         if ($last -eq 0) { $scaleText = 'scale {0}..{1} {2}, {3}' -f $minText, $maxText, $Chart.Unit, $scaleText }
     }
     else {
-        $Lines.Add((New-FrameLine ((' {0,-10} |{1}|' -f $Chart.Label, (Get-Sparkline $visible $range.Min $range.Max $sparkWidth))) $Chart.Color))
-        $scaleText = 'scale {0}..{1} {2}: _ . - ~ = + * #' -f $minText, $maxText, $Chart.Unit
+        $Lines.Add((New-FrameLine ((' {0,-10} |{1}|' -f $Chart.Label, (Get-Sparkline $plot.Values $plot.Min $plot.Max $sparkWidth))) $Chart.Color))
+        $scaleText = '{0} {1}..{2} {3}: _ . - ~ = + * #' -f $(if ($scale.Log) { 'log scale' } else { 'scale' }), $minText, $maxText, $Chart.Unit
     }
     $stat = Get-SignalStatistic $Values
-    $text = if ($null -eq $stat) { '(no valid samples)' } else {
+    $text = if ($null -eq $stat) { '(no valid samples)' }
+    elseif ($Chart.Si) {
+        'min {0} / avg {1} / max {2}  (n={3}, {4})' -f (Format-SiValue $stat.Min $Chart.Unit), (Format-SiValue $stat.Avg $Chart.Unit),
+        (Format-SiValue $stat.Max $Chart.Unit), $stat.Count, $scaleText
+    }
+    else {
         'min {0} / avg {1} / max {2} {3}  (n={4}, {5})' -f $stat.Min, $stat.Avg, $stat.Max, $Chart.Unit, $stat.Count, $scaleText
     }
     $Lines.Add((New-FrameLine ((' ' * ($headWidth + 1)) + $text) 'DarkGray'))
@@ -266,7 +292,8 @@ function Get-MonitorFrame {
     }
     else {
         $lines.Add((New-FrameLine " $($snapshot.ProviderName) ($($snapshot.ProviderId)) | $($snapshot.DataClass) | APN: $($snapshot.Apn)"))
-        $lines.Add((New-FrameLine (' BW: {0} Mbps   RX: {1} KB/s   TX: {2} KB/s   Updated: {3}' -f $snapshot.BwMbps, $snapshot.RxKB, $snapshot.TxKB, $snapshot.Timestamp)))
+        $lines.Add((New-FrameLine (' BW: {0} Mbps   RX: {1}   TX: {2}   Updated: {3}' -f $snapshot.BwMbps,
+                    (Format-SiValue ($snapshot.RxKB * 1024) 'B/s'), (Format-SiValue ($snapshot.TxKB * 1024) 'B/s'), $snapshot.Timestamp)))
         $lines.Add((New-FrameLine (' Temp: {0}   RSSNR: {1}   CA: {2}' -f
                     (Format-OptionalValue $snapshot.TempC '{0} C'), (Format-OptionalValue $snapshot.Rssnr '{0:0.0} dB'),
                     (Format-CarrierAggregation $snapshot.Ca))))

@@ -33,17 +33,22 @@ function Get-AutoScale {
     return [pscustomobject]@{ Min = $lo; Max = $hi }
 }
 
-# Scale anchored at 0 for non-negative series with no natural range (throughput):
-# Max is the max valid value rounded up to 1/2/5 x 10^n, at least $MinMax so an idle
-# link does not magnify noise.
-function Get-ZeroBasedScale([double[]]$Values, [double]$MinMax) {
-    $valid = @($Values | Where-Object { -not [double]::IsNaN($_) })
-    $max = if ($valid.Count -eq 0) { 0 } else { ($valid | Measure-Object -Maximum).Maximum }
-    if ($max -le $MinMax) { return [pscustomobject]@{ Min = 0; Max = $MinMax } }
-    $p = [math]::Pow(10, [math]::Floor([math]::Log10($max)))
-    foreach ($m in 1, 2, 5, 10) {
-        if ($m * $p -ge $max) { return [pscustomobject]@{ Min = 0; Max = $m * $p } }
-    }
+# Log scale for non-negative series spanning decades (throughput): [Min, Max] are powers of
+# 10 around the positive valid values (at least one decade apart), with Min no lower than
+# $Floor (the value resolution). With no positive values the range is [$Floor, 10 x $Floor].
+# Values are plotted as log10 (ConvertTo-LogValue); 0 and values below Min sit on the bottom level.
+function Get-LogScale([double[]]$Values, [double]$Floor) {
+    $positive = @($Values | Where-Object { -not [double]::IsNaN($_) -and $_ -gt 0 })
+    if ($positive.Count -eq 0) { return [pscustomobject]@{ Min = $Floor; Max = $Floor * 10 } }
+    $m = $positive | Measure-Object -Minimum -Maximum
+    $lo = [math]::Max([math]::Floor([math]::Log10($Floor)), [math]::Floor([math]::Log10($m.Minimum)))
+    $hi = [math]::Max($lo + 1, [math]::Ceiling([math]::Log10($m.Maximum)))
+    return [pscustomobject]@{ Min = [math]::Pow(10, $lo); Max = [math]::Pow(10, $hi) }
+}
+
+# log10 of each value, clamped to at least $Floor (> 0) so 0 stays finite; NaN stays NaN.
+function ConvertTo-LogValue([double[]]$Values, [double]$Floor) {
+    return [double[]]@($Values | ForEach-Object { if ([double]::IsNaN($_)) { $_ } else { [math]::Log10([math]::Max($Floor, $_)) } })
 }
 
 # Sparklines map [Min, Max] linearly onto N levels (values outside are clamped).
