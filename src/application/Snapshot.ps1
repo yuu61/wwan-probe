@@ -37,6 +37,26 @@ function Get-LteNeighbor($XmciCells) {
     return , $neighbors
 }
 
+# LTE neighbor cells reported by WinRT (MBIM_CID_BASE_STATIONS_INFO), or $null when there are none.
+# Returning none is allowed by the spec (the L860-GL never reports any), so an empty list is
+# treated as "unavailable" and does not hide the AT error.
+function Get-WinRtLteNeighbor($Cells) {
+    $neighbors = @()
+    foreach ($cell in @($Cells | Where-Object { $_ })) {
+        $rsrpDbm = ConvertFrom-WinRtRsrp $cell.ReferenceSignalReceivedPowerInDBm
+        if ($null -eq $rsrpDbm -or $null -eq $cell.ChannelNumber) { continue }
+        $neighbors += [pscustomobject]@{
+            RsrpDbm = $rsrpDbm
+            RsrqDb  = ConvertFrom-WinRtRsrq $cell.ReferenceSignalReceivedQualityInDBm
+            Band    = Get-EarfcnBand $cell.ChannelNumber
+            Earfcn  = $cell.ChannelNumber
+            Pci     = $cell.PhysicalCellId
+        }
+    }
+    if ($neighbors.Count -eq 0) { return $null }
+    return , $neighbors
+}
+
 # Values WinRT does not provide, read over the Intel AT Tunnel in one session.
 # Each field is $null when its command failed.
 function Get-AtStatus($Modem) {
@@ -97,7 +117,7 @@ function Get-LteSnapshot($Modem) {
                 Earfcn   = $primary.ChannelNumber
                 Pci      = $primary.PhysicalCellId
                 Tac      = $primary.TrackingAreaCode
-                RsrpDbm  = Convert-RsrpIndex $primary.ReferenceSignalReceivedPowerInDBm
+                RsrpDbm  = ConvertFrom-WinRtRsrp $primary.ReferenceSignalReceivedPowerInDBm
             }
         }
 
@@ -108,15 +128,16 @@ function Get-LteSnapshot($Modem) {
 
         $serving = @()
         foreach ($cell in $cellsInfo.ServingCellsLte) {
-            $rsrpIdx = $cell.ReferenceSignalReceivedPowerInDBm
-            $rsrqIdx = $cell.ReferenceSignalReceivedQualityInDBm
-            $rsrpDbm = Convert-RsrpIndex $rsrpIdx
+            # Raw WinRT values: dBm / dB per the MBIM spec, or 3GPP indices on the L860-GL.
+            $rsrpRaw = $cell.ReferenceSignalReceivedPowerInDBm
+            $rsrqRaw = $cell.ReferenceSignalReceivedQualityInDBm
+            $rsrpDbm = ConvertFrom-WinRtRsrp $rsrpRaw
             if ($null -eq $rsrpDbm) { continue }
             $serving += [pscustomobject]@{
                 RsrpDbm  = $rsrpDbm
-                RsrpIdx  = $rsrpIdx
-                RsrqDb   = Convert-RsrqIndex $rsrqIdx
-                RsrqIdx  = $rsrqIdx
+                RsrpRaw  = $rsrpRaw
+                RsrqDb   = ConvertFrom-WinRtRsrq $rsrqRaw
+                RsrqRaw  = $rsrqRaw
                 Quality  = Get-RsrpQuality $rsrpDbm
                 Band     = Get-EarfcnBand $cell.ChannelNumber
                 Earfcn   = $cell.ChannelNumber
@@ -138,6 +159,9 @@ function Get-LteSnapshot($Modem) {
         }
         catch {
             $snapshot.AtError = $_.Exception.Message
+        }
+        if ($null -eq $snapshot.Neighbors) {
+            $snapshot.Neighbors = Get-WinRtLteNeighbor $cellsInfo.NeighboringCellsLte
         }
 
         $legacyServing = 0

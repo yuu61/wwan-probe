@@ -29,3 +29,16 @@ foreach ($case in $bands.GetEnumerator()) {
     Assert-Equal $case.Value (Get-EarfcnBand $case.Key) "EARFCN $($case.Key)"
 }
 Write-Output 'PASS: EARFCN band table'
+
+# WinRT RSRP / RSRQ: MBIM spec dBm / dB and L860-GL 3GPP indices
+Assert-Equal -100 (ConvertFrom-WinRtRsrp -100) 'Spec RSRP dBm'
+Assert-Equal -140 (ConvertFrom-WinRtRsrp -140) 'Spec RSRP lower bound'
+Assert-Equal -80 (ConvertFrom-WinRtRsrp 61) 'Index RSRP (L860-GL: 61 -> -80 dBm)'
+Assert-Equal $null (ConvertFrom-WinRtRsrp $null) 'Missing RSRP must not become index 0'
+Assert-Equal $null (ConvertFrom-WinRtRsrp 255) 'Invalid RSRP'
+Assert-Equal $null (ConvertFrom-WinRtRsrp ([double][uint32]::MaxValue)) 'MBIM 0xFFFFFFFF RSRP'
+Assert-Equal -12 (ConvertFrom-WinRtRsrq -12) 'Spec RSRQ dB'
+Assert-Equal -10 (ConvertFrom-WinRtRsrq 20) 'Index RSRQ (20 -> -10 dB)'
+Assert-Equal $null (ConvertFrom-WinRtRsrq -30) 'Out of range RSRQ'
+Assert-Equal $null (ConvertFrom-WinRtRsrq $null) 'Missing RSRQ'
+Write-Output 'PASS: WinRT RSRP/RSRQ normalization'
