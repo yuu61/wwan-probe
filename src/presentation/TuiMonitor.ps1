@@ -49,10 +49,14 @@ function Invoke-TuiMonitor($Session) {
     $savedCursor = [Console]::CursorVisible
     $savedCtrlC = [Console]::TreatControlCAsInput
     $savedEncoding = [Console]::OutputEncoding
+    $inAltScreen = $false
 
     try {
         # Block glyphs (U+2581..U+2588) become '?' under the default CP932 output encoding.
         [Console]::OutputEncoding = [Text.Encoding]::UTF8
+        # Draw on the alternate screen so quitting restores the shell's previous screen.
+        Set-AlternateScreen $true
+        $inAltScreen = $true
         [Console]::CursorVisible = $false
         [Console]::TreatControlCAsInput = $true
         [Console]::Clear()
@@ -74,10 +78,9 @@ function Invoke-TuiMonitor($Session) {
     }
     finally {
         [Console]::ResetColor()
+        if ($inAltScreen) { Set-AlternateScreen $false }
         [Console]::TreatControlCAsInput = $savedCtrlC
         [Console]::CursorVisible = $savedCursor
         [Console]::OutputEncoding = $savedEncoding
-        # Keep the last frame on screen; the message replaces the footer row.
-        if ($view.LastHeight -gt 0) { [Console]::SetCursorPosition(0, $view.LastHeight - 1) }
     }
 }

@@ -12,6 +12,16 @@ function Write-ConsoleLine {
     [Console]::ResetColor()
 }
 
+# Switches to/from the alternate screen buffer (VT). Leaving it restores the
+# screen as it was before entering, so no TUI frame remains after exit.
+function Set-AlternateScreen {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '')]
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
+    param([bool]$Enabled)
+
+    [Console]::Write($(if ($Enabled) { "`e[?1049h" } else { "`e[?1049l" }))
+}
+
 # Redraws the whole screen in place (no Clear-Host per frame to avoid flicker).
 function Show-Frame($Frame, [int]$Width, [int]$Height) {
     $bodyRows = $Height - 1
