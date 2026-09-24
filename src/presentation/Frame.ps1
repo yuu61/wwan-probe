@@ -63,8 +63,14 @@ $script:HistoryCharts = @(
     [pscustomobject]@{ Key = '5'; Label = 'TX'; History = 'TxKB'; Unit = 'KB/s'; StepUnit = 'KB/s'; Color = 'Magenta'; Visible = $false
         Scale = @{ ZeroBased = $true; MinMax = 10 } }
     [pscustomobject]@{ Key = '6'; Label = 'Temp'; History = 'TempC'; Unit = 'C'; StepUnit = 'C'; Color = 'DarkRed'; Visible = $false
-        Scale = @{ Step = 5; MinSpan = 10; Floor = -40; Ceiling = 125 } }
+        Scale = @{ Step = 5; MinSpan = 10; Floor = -40; Ceiling = 125 }; RowsRatio = 0.5 }
 )
+
+# Rows for one chart: RowsRatio (default 1) of the shared chart height, rounded down, at least ChartRowsMin.
+function Get-ChartRow($Chart, [int]$Rows) {
+    $ratio = if ($null -ne $Chart.RowsRatio) { $Chart.RowsRatio } else { 1 }
+    return [math]::Max($script:ChartRowsMin, [int][math]::Floor($Rows * $ratio))
+}
 
 # Unicode chart height in rows (each row adds 8 levels).
 $script:ChartRowsDefault = 2
@@ -156,7 +162,7 @@ function Add-HistorySection {
     if ($hidden.Count -gt 0) { $title += "  hidden: " + (($hidden | ForEach-Object { "$($_.Key) $($_.Label)" }) -join ", ") }
     $Lines.Add((New-FrameLine (Get-SectionRule $title $Width) "DarkCyan"))
     foreach ($chart in $shown) {
-        Add-HistoryChart -Lines $Lines -Chart $chart -Values $Session.History[$chart.History].ToArray() -Width $Width -Unicode $View.Unicode -Rows $chartRows
+        Add-HistoryChart -Lines $Lines -Chart $chart -Values $Session.History[$chart.History].ToArray() -Width $Width -Unicode $View.Unicode -Rows (Get-ChartRow $chart $chartRows)
     }
 }
 
