@@ -11,6 +11,28 @@ function Get-RsrpBar([int]$dbm) {
     return "[$filled$empty]"
 }
 
+# Auto scale for a sparkline: [min, max] of the valid (non-NaN) values, snapped outward
+# to multiples of $Step, widened (around the data center) to at least $MinSpan so a steady
+# signal does not magnify noise, then shifted/clamped into [$Floor, $Ceiling].
+# With no valid values the whole [$Floor, $Ceiling] range is returned.
+function Get-AutoScale {
+    param([double[]]$Values, [double]$Step, [double]$MinSpan, [double]$Floor, [double]$Ceiling)
+
+    $valid = @($Values | Where-Object { -not [double]::IsNaN($_) })
+    if ($valid.Count -eq 0) { return [pscustomobject]@{ Min = $Floor; Max = $Ceiling } }
+    $m = $valid | Measure-Object -Minimum -Maximum
+    $lo = [math]::Floor($m.Minimum / $Step) * $Step
+    $hi = [math]::Ceiling($m.Maximum / $Step) * $Step
+    $need = [math]::Ceiling($MinSpan / $Step) * $Step
+    if ($hi - $lo -lt $need) {
+        $lo = [math]::Min($lo, [math]::Floor((($m.Minimum + $m.Maximum) / 2 - $need / 2) / $Step) * $Step)
+        $hi = [math]::Max($hi, $lo + $need)
+    }
+    if ($lo -lt $Floor) { $hi = [math]::Min($Ceiling, $hi + ($Floor - $lo)); $lo = $Floor }
+    if ($hi -gt $Ceiling) { $lo = [math]::Max($Floor, $lo - ($hi - $Ceiling)); $hi = $Ceiling }
+    return [pscustomobject]@{ Min = $lo; Max = $hi }
+}
+
 # Sparklines map [Min, Max] linearly onto N levels (values outside are clamped).
 # Only the most recent $Width samples are shown, right-aligned. NaN (missing sample)
 # is drawn as a blank column so series sharing a time axis stay aligned.

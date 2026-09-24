@@ -18,28 +18,34 @@ function Get-SectionRule([string]$Title, [int]$Width) {
 }
 
 # Appends one history chart (sparkline rows + stats line) to $Lines.
+# $Scale: @{ Step; MinSpan; Floor; Ceiling } for Get-AutoScale. The scale is computed
+# from the visible (most recent) samples only; its bounds are shown as the axis labels.
+# Stats cover the whole history.
 function Add-HistoryChart {
     param(
         [System.Collections.Generic.List[object]]$Lines, [string]$Label, [double[]]$Values,
-        [double]$Min, [double]$Max, [string]$Unit, [string]$Color, [int]$Width, [bool]$Unicode
+        [hashtable]$Scale, [string]$Unit, [string]$Color, [int]$Width, [bool]$Unicode
     )
-    $head = " {0,-7} " -f $Label
-    $sparkWidth = [math]::Max(10, $Width - $head.Length - 4)
+    $headWidth = 12
+    $sparkWidth = [math]::Max(10, $Width - $headWidth - 4)
+    $visible = @($Values | Select-Object -Last $sparkWidth)
+    $range = Get-AutoScale -Values $visible @Scale
     if ($Unicode) {
-        $rows = Get-BlockSparkline $Values $Min $Max $sparkWidth
-        $Lines.Add((New-FrameLine "$head|$($rows[0])|" $Color))
-        $Lines.Add((New-FrameLine ((" " * $head.Length) + "|$($rows[1])|") $Color))
-        $scale = "scale $Min..$Max $Unit, 16 levels"
+        $rows = Get-BlockSparkline $visible $range.Min $range.Max $sparkWidth
+        $Lines.Add((New-FrameLine ((" {0,-5}{1,5} |{2}|" -f $Label, $range.Max, $rows[0])) $Color))
+        $Lines.Add((New-FrameLine ((" {0,-5}{1,5} |{2}|" -f "", $range.Min, $rows[1])) $Color))
+        # Step is a difference, so it is always in dB (not dBm).
+        $scaleText = "{0:0.##} dB/level" -f (($range.Max - $range.Min) / 16)
     }
     else {
-        $Lines.Add((New-FrameLine "$head|$(Get-Sparkline $Values $Min $Max $sparkWidth)|" $Color))
-        $scale = "scale $Min..$Max ${Unit}: _ . - ~ = + * #"
+        $Lines.Add((New-FrameLine ((" {0,-10} |{1}|" -f $Label, (Get-Sparkline $visible $range.Min $range.Max $sparkWidth))) $Color))
+        $scaleText = "scale {0}..{1} {2}: _ . - ~ = + * #" -f $range.Min, $range.Max, $Unit
     }
     $stat = Get-SignalStatistic $Values
     $text = if ($null -eq $stat) { "(no valid samples)" } else {
-        "min {0} / avg {1} / max {2} {3}  (n={4}, {5})" -f $stat.Min, $stat.Avg, $stat.Max, $Unit, $stat.Count, $scale
+        "min {0} / avg {1} / max {2} {3}  (n={4}, {5})" -f $stat.Min, $stat.Avg, $stat.Max, $Unit, $stat.Count, $scaleText
     }
-    $Lines.Add((New-FrameLine ((" " * ($head.Length + 1)) + $text) "DarkGray"))
+    $Lines.Add((New-FrameLine ((" " * ($headWidth + 1)) + $text) "DarkGray"))
 }
 
 function Get-MonitorFrame {
@@ -91,8 +97,10 @@ function Get-MonitorFrame {
         $rsrp = $Session.RsrpHistory.ToArray()
         if ($rsrp.Count -gt 0) {
             $lines.Add((New-FrameLine (Get-SectionRule "History (primary cell)" $Width) "DarkCyan"))
-            Add-HistoryChart -Lines $lines -Label "RSRP" -Values $rsrp -Min -120 -Max -70 -Unit "dBm" -Color "DarkGreen" -Width $Width -Unicode $View.Unicode
-            Add-HistoryChart -Lines $lines -Label "RSRQ" -Values $Session.RsrqHistory.ToArray() -Min -20 -Max -3 -Unit "dB" -Color "DarkYellow" -Width $Width -Unicode $View.Unicode
+            Add-HistoryChart -Lines $lines -Label "RSRP" -Values $rsrp -Unit "dBm" `
+                -Scale @{ Step = 5; MinSpan = 10; Floor = -140; Ceiling = -44 } -Color "DarkGreen" -Width $Width -Unicode $View.Unicode
+            Add-HistoryChart -Lines $lines -Label "RSRQ" -Values $Session.RsrqHistory.ToArray() -Unit "dB" `
+                -Scale @{ Step = 1; MinSpan = 4; Floor = -20; Ceiling = -3 } -Color "DarkYellow" -Width $Width -Unicode $View.Unicode
         }
 
         # Neighbors
