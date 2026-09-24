@@ -20,13 +20,15 @@
 # Layers (src/<layer>/*.ps1, lower layers never call upper ones):
 #   domain rules <- infrastructure adapters / application use cases <- presentation
 
+# CmdletBinding rejects unknown or misspelled options instead of silently ignoring them.
+[CmdletBinding()]
 param(
     [ValidateRange(0, 86400)][int]$Interval = 0,
     [ValidateRange(0, [int]::MaxValue)][int]$Count = 0,
     [string]$CsvPath = '',
     [ValidatePattern('^(COM\d+)?$')][string]$AtPort = '',
     [switch]$Gps,
-    [switch]$Nmea
+    [Alias('Nema')][switch]$Nmea
 )
 
 # Shared composition root; definitions must load into this script's scope.

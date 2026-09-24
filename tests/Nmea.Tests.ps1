@@ -156,3 +156,11 @@ Send-TestKey S, S
 Read-TuiInput $view
 Assert-True (-not $view.SatelliteVisible -and -not $view.HandoverVisible -and $view.SatelliteOffset -eq 0) 's did not return to the monitor.'
 Write-Output 'PASS: s toggles the satellite list, exclusive with h'
+
+# A misspelled option must fail instead of silently running without NMEA (binding fails
+# before the script touches the modem). -Nema is accepted as a spelling of -Nmea.
+$entry = Join-Path $root 'lte_monitor.ps1'
+$output = pwsh -NoProfile -File $entry -Nmae 2>&1 | Out-String
+Assert-True ($LASTEXITCODE -ne 0 -and $output -match 'Nmae') 'An unknown option was ignored.'
+Assert-True ((Get-Command $entry).Parameters.Nmea.Aliases -contains 'Nema') '-Nema is not accepted.'
+Write-Output 'PASS: unknown options are rejected; -Nema selects -Nmea'

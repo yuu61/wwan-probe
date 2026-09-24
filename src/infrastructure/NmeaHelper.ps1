@@ -23,7 +23,6 @@ $lock = $null
 $device = $null
 $gps = $null
 $loggingEnabled = $false
-$version = 0
 $finished = $false
 try {
     $state.UpdatedUnixMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
@@ -36,12 +35,11 @@ try {
     $interfaces = @(Get-GnssDeviceInterface)
     if ($interfaces.Count -eq 0) { throw 'No GNSS device interface found.' }
     $device = Open-GnssDevice $interfaces[0].Id
-    $version = (Get-GnssCapability $device).DriverVersion
     # Windows owns the fix session and assistance data; the native handle only listens.
     $gps = Start-GpsReceiver
     if ($gps.Error) { throw $gps.Error }
     $loggingEnabled = $true
-    Set-GnssNmeaLogging $device $version $true
+    $device.SetNmeaLogging($true)
     $state.Status = 'Receiving'
     $satellites = New-NmeaSatelliteState
     $buffer = ''
@@ -49,7 +47,7 @@ try {
     $dirty = $true
     while (-not $finished) {
         # A short listen timeout keeps stop requests and a closed monitor noticed within ~1 s.
-        $chunk = Read-GnssNmea $device 1000
+        $chunk = $device.ReadNmea(1000)
         $now = [DateTimeOffset]::UtcNow
         if ($null -ne $chunk) {
             $split = Split-NmeaStream ($buffer + $chunk)
@@ -71,15 +69,16 @@ try {
 }
 catch {
     $state.Status = 'Error'
-    $state.Error = $_.Exception.Message
+    # GetBaseException drops PowerShell's "Exception calling ..." wrapper around .NET errors.
+    $state.Error = $_.Exception.GetBaseException().Message
 }
 finally {
     try {
-        if ($loggingEnabled) { Set-GnssNmeaLogging $device $version $false }
+        if ($loggingEnabled) { $device.SetNmeaLogging($false) }
     }
     catch {
         $state.Status = 'Error'
-        $state.Error = (@($state.Error, "NMEA logging not restored: $($_.Exception.Message)") | Where-Object { $_ }) -join '; '
+        $state.Error = (@($state.Error, "NMEA logging not restored: $($_.Exception.GetBaseException().Message)") | Where-Object { $_ }) -join '; '
     }
     finally {
         if ($null -ne $device) { $device.Dispose() }
