@@ -66,6 +66,7 @@ function Get-LteSnapshot($Modem) {
         RxKB          = 0
         TxKB          = 0
         Serving       = @()
+        PrimaryCell   = $null  # Unfiltered first LTE cell, even when RSRP is unavailable.
         Umts          = @()
         # From the AT Tunnel ($null = unavailable; AtError holds the reason when the session failed)
         Neighbors     = $null  # @() = none reported
@@ -86,6 +87,19 @@ function Get-LteSnapshot($Modem) {
         $snapshot.Apn = "$($network.AccessPointName)"
 
         $cellsInfo = Get-ModemCellsInfo $network
+
+        $primary = $cellsInfo.ServingCellsLte | Select-Object -First 1
+        if ($null -ne $primary) {
+            $snapshot.PrimaryCell = [pscustomobject]@{
+                Provider = if ($primary.ProviderId) { "$($primary.ProviderId)" } else { $snapshot.ProviderId }
+                CellId = $primary.CellId
+                Band = Get-EarfcnBand $primary.ChannelNumber
+                Earfcn = $primary.ChannelNumber
+                Pci = $primary.PhysicalCellId
+                Tac = $primary.TrackingAreaCode
+                RsrpDbm = Convert-RsrpIndex $primary.ReferenceSignalReceivedPowerInDBm
+            }
+        }
 
         $traffic = Get-AdapterTraffic
         $snapshot.BwMbps = $traffic.BwMbps

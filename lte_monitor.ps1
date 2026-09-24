@@ -5,6 +5,7 @@
 # Count=0 means infinite loop. CsvPath enables CSV logging (one row per sample, see src/application/SnapshotLog.ps1).
 # Keys:  q / Esc / Ctrl+C = quit,  p = pause/resume,  r = refresh now,
 #        1-6 = show/hide a history chart (RSRP/RSRQ/SNR/RX/TX/Temp),  g = show/hide all charts
+#        h = handover history, Up/Down = chart height or newer/older handovers
 # Requires PowerShell 7.4+ (Windows). Run .\setup.ps1 once beforehand to download
 # the WinRT projection DLLs into .\lib (Windows PowerShell 5.1 is not supported).
 # When stdin/stdout is redirected, falls back to plain sequential output.

@@ -17,6 +17,7 @@ function New-TestSession([int]$Count = 0, [int]$Interval = 0) {
         Modem = $null; Snapshot = $null; Iteration = 0; HistoryMax = 600
         Config = [pscustomobject]@{ Count = $Count; Interval = $Interval; CsvPath = '' }
         History = New-SignalHistory
+        HandoverLog = New-HandoverLog
         DowngradeLog = [pscustomobject]@{ AlertCount = 0; WarningCount = 0 }
     }
 }

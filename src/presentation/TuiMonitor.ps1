@@ -1,7 +1,7 @@
 # Presentation: interactive full-screen TUI loop.
 # Keys: q / Esc / Ctrl+C = quit, p = pause/resume, r = refresh now,
 #       1-6 = show/hide one history chart, g = show/hide all charts,
-#       Up / Down = taller / shorter history charts
+#       h = handover history, Up / Down = chart height or newer / older handovers
 
 # Renders current state; clears the screen once when the window is resized.
 function Show-TuiScreen($Session, [hashtable]$View) {
@@ -36,7 +36,19 @@ function Read-TuiInput([hashtable]$View) {
         }
         # An in-flight sample already satisfies a refresh request.
         if ($key.Key -eq 'R' -and -not $View.Fetching) { $View.RefreshRequested = $true }
+        if ($key.Key -eq 'H') {
+            $View.HandoverVisible = -not $View.HandoverVisible
+            $View.HandoverOffset = 0
+            $View.Dirty = $true
+            continue
+        }
         if ($key.Key -eq 'UpArrow' -or $key.Key -eq 'DownArrow') {
+            if ($View.HandoverVisible) {
+                $delta = if ($key.Key -eq 'UpArrow') { -1 } else { 1 }
+                $View.HandoverOffset = [math]::Max(0, [int]$View.HandoverOffset + $delta)
+                $View.Dirty = $true
+                continue
+            }
             $rows = Step-ChartHeight $View.ChartRows $(if ($key.Key -eq 'UpArrow') { 1 } else { -1 })
             if ($rows -ne $View.ChartRows) { $View.ChartRows = $rows; $View.Dirty = $true }
             continue
@@ -81,6 +93,7 @@ function Invoke-TuiMonitor($Session) {
         Paused = $false; Fetching = $false; Done = $false; Quit = $false; Unicode = $true
         RefreshRequested = $true; LastWidth = 0; LastHeight = 0; ChartVisible = New-ChartVisibility
         ChartRows = $script:ChartRowsDefault; Dirty = $true
+        HandoverVisible = $false; HandoverOffset = 0
     }
     $savedCursor = [Console]::CursorVisible
     $savedCtrlC = [Console]::TreatControlCAsInput

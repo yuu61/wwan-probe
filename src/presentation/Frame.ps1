@@ -160,6 +160,46 @@ function Add-HistorySection {
     }
 }
 
+function Format-HandoverCell($Cell) {
+    return "{0} PCI:{1} PLMN:{2} EARFCN:{3} TAC:{4} RSRP:{5}" -f
+        $Cell.Band, $Cell.Pci, $Cell.Provider, $Cell.Earfcn, $Cell.Tac,
+        (Format-OptionalValue $Cell.RsrpDbm '{0}dBm')
+}
+
+# Compact recent changes on the main screen; a separate view keeps the retained
+# history accessible even when charts or a small console would clip the body.
+function Add-HandoverSection {
+    param([System.Collections.Generic.List[object]]$Lines, $Log, [hashtable]$View, [int]$Width)
+
+    $count = if ($Log) { $Log.Count } else { 0 }
+    $Lines.Add((New-FrameLine (Get-SectionRule "Handover history ($count) [h]" $Width) 'DarkCyan'))
+    if ($null -eq $Log -or $Log.Entries.Count -eq 0) {
+        $Lines.Add((New-FrameLine ' (no LTE cell changes observed this session)' 'DarkGray'))
+        return
+    }
+    if ($View.HandoverVisible) {
+        $height = if ($View.LastHeight -gt 0) { $View.LastHeight } else { 30 }
+        # Title, rule, optional downgrade warning, section title, range and footer.
+        $pageSize = [math]::Max(1, [int][math]::Floor(($height - 6) / 2))
+        $offset = [math]::Clamp([int]$View.HandoverOffset, 0, [math]::Max(0, $Log.Entries.Count - $pageSize))
+        $View.HandoverOffset = $offset
+        $end = [math]::Min($Log.Entries.Count, $offset + $pageSize)
+        $Lines.Add((New-FrameLine (" Newest first: {0}-{1} / {2} retained (limit {3})" -f ($offset + 1), $end, $Log.Entries.Count, $Log.MaxEntries) 'DarkGray'))
+        for ($i = $offset; $i -lt $end; $i++) {
+            $entry = $Log.Entries[$Log.Entries.Count - 1 - $i]
+            $Lines.Add((New-FrameLine " #$($entry.Number) $($entry.Timestamp) Switched to CellID:$($entry.To.CellId)" 'Yellow'))
+            $Lines.Add((New-FrameLine ("   " + (Format-HandoverCell $entry.To))))
+        }
+    }
+    else {
+        for ($i = $Log.Entries.Count - 1; $i -ge [math]::Max(0, $Log.Entries.Count - 3); $i--) {
+            $entry = $Log.Entries[$i]
+            $Lines.Add((New-FrameLine (" {0} Switched to CellID:{1} {2} PCI:{3}" -f
+                $entry.Timestamp, $entry.To.CellId, $entry.To.Band, $entry.To.Pci) 'Yellow'))
+        }
+    }
+}
+
 function Get-MonitorFrame {
     param($Session, [hashtable]$View, [int]$Width)
 
@@ -181,6 +221,14 @@ function Get-MonitorFrame {
 
     # 2G/3G downgrade warnings go first so they are never scrolled away
     Add-DowngradeLine -Lines $lines -Finding $(if ($snapshot) { $snapshot.Downgrade }) -Log $Session.DowngradeLog
+
+    if ($View.HandoverVisible) {
+        Add-HandoverSection -Lines $lines -Log $Session.HandoverLog -View $View -Width $Width
+        return [pscustomobject]@{
+            Body = $lines
+            Footer = New-FrameLine ' [h] Monitor  [Up/Down] Newer/Older  [q] Quit  [p] Pause  [r] Refresh' 'Black'
+        }
+    }
 
     # Device
     $lines.Add((New-FrameLine " Model: $($summary.Model)   FW: $($summary.Firmware)"))
@@ -223,6 +271,8 @@ function Get-MonitorFrame {
             $lines.Add((New-FrameLine " $($c.Band) | EARFCN:$($c.Earfcn) | PCI:$($c.Pci) | CellID:$($c.CellId) | TAC:$($c.Tac) | TA:$($c.Ta) | MNC:$($c.Provider)"))
         }
 
+        Add-HandoverSection -Lines $lines -Log $Session.HandoverLog -View $View -Width $Width
+
         # History (primary serving cell and modem-wide values) on one time axis
         if ($Session.History['Rsrp'].Count -gt 0) {
             Add-HistorySection -Lines $lines -Session $Session -View $View -Width $Width
@@ -257,7 +307,7 @@ function Get-MonitorFrame {
 
     # Footer is returned separately so it can be pinned to the bottom row.
     $csvStr = if ($config.CsvPath) { "  CSV: $($config.CsvPath)" } else { "" }
-    $footer = New-FrameLine " [q] Quit  [p] Pause  [r] Refresh  [1-6] Chart  [g] All charts  [Up/Down] Chart rows   Interval: $($config.Interval)s$csvStr" "Black"
+    $footer = New-FrameLine " [q] Quit  [p] Pause  [r] Refresh  [h] Handovers  [1-6] Chart  [g] All charts  [Up/Down] Chart rows   Interval: $($config.Interval)s$csvStr" "Black"
 
     return [pscustomobject]@{ Body = $lines; Footer = $footer }
 }
