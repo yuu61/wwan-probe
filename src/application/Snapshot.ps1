@@ -2,10 +2,10 @@
 
 function Get-ModemSummary($Modem) {
     $devInfo = $Modem.DeviceInformation
-    # Enabled LTE bands do not change while running, so query them once.
-    $lteBands = $null
-    try { $lteBands = ConvertFrom-XactResponse (Invoke-ModemAtCommand $Modem 'AT+XACT?')['AT+XACT?'] }
-    catch { $lteBands = $null }
+    # The RAT / band configuration does not change while running, so query it once.
+    $ratConfig = $null
+    try { $ratConfig = ConvertFrom-XactResponse (Invoke-ModemAtCommand $Modem 'AT+XACT?')['AT+XACT?'] }
+    catch { $ratConfig = $null }
     return [pscustomobject]@{
         Model      = "$($devInfo.Model)"
         Firmware   = "$($devInfo.FirmwareInformation)"
@@ -14,16 +14,16 @@ function Get-ModemSummary($Modem) {
         SimSpn     = "$($devInfo.SimSpn)"
         RadioState = "$($devInfo.CurrentRadioState)"
         DataClass  = "$($devInfo.DataClasses)"
-        LteBands   = $lteBands  # $null = unavailable
+        RatConfig  = $ratConfig  # ConvertFrom-XactResponse result, $null = unavailable
     }
 }
 
-# LTE neighbor cells from an AT+XMCI response ($null when the command failed).
-function Get-LteNeighbor([string]$Response) {
-    if (-not $Response -or $Response -notmatch '(?m)^OK\s*$') { return $null }
+# LTE neighbor cells from ConvertFrom-XmciResponse output ($null when XMCI was unavailable).
+function Get-LteNeighbor($XmciCells) {
+    if ($null -eq $XmciCells) { return $null }
     $neighbors = @()
-    foreach ($cell in (ConvertFrom-XmciResponse $Response)) {
-        if ($cell.Type -ne 'Neighbor') { continue }
+    foreach ($cell in $XmciCells) {
+        if ($cell.Rat -ne 'LTE' -or $cell.Role -ne 'Neighbor') { continue }
         $rsrpDbm = Convert-RsrpIndex $cell.RsrpIdx
         if ($null -eq $rsrpDbm -or $null -eq $cell.Earfcn) { continue }
         $neighbors += [pscustomobject]@{
@@ -44,13 +44,17 @@ function Get-AtStatus($Modem) {
     # measurement and was seen to hang for >10 s on a weak cell. It goes last so a timeout
     # only costs the neighbor list.
     $r = Invoke-ModemAtCommand $Modem @('AT+MTSM=1', 'AT+XCESQ?', 'AT+XLEC?', 'AT+XMCI=0')
+    $xmci = $r['AT+XMCI=0']
+    $xmciCells = if ($xmci -and $xmci -match '(?m)^OK\s*$') { , @(ConvertFrom-XmciResponse $xmci) } else { $null }
     return [pscustomobject]@{
-        Neighbors = Get-LteNeighbor $r['AT+XMCI=0']
+        XmciCells = $xmciCells
+        Neighbors = Get-LteNeighbor $xmciCells
         TempC     = ConvertFrom-MtsmResponse $r['AT+MTSM=1']
         Rssnr     = ConvertFrom-XcesqResponse $r['AT+XCESQ?']
         Ca        = ConvertFrom-XlecResponse $r['AT+XLEC?']
     }
 }
+
 function Get-LteSnapshot($Modem) {
     $snapshot = [pscustomobject]@{
         Timestamp     = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -69,6 +73,8 @@ function Get-LteSnapshot($Modem) {
         Rssnr         = $null  # raw value, unit undocumented
         Ca            = $null  # @{ Cells; BandwidthsMHz }
         AtError       = $null
+        # 2G/3G downgrade check (Get-DowngradeFinding): @{ Level = Alert/Warning/None; Reasons }
+        Downgrade     = $null
         Error         = $null
     }
 
@@ -110,13 +116,22 @@ function Get-LteSnapshot($Modem) {
         $snapshot.Serving = $serving
 
         # WinRT lacks neighbors, temperature, SINR and CA info for this modem.
+        $xmciCells = $null
         try {
             $at = Get-AtStatus $Modem
             foreach ($name in 'Neighbors', 'TempC', 'Rssnr', 'Ca') { $snapshot.$name = $at.$name }
+            $xmciCells = $at.XmciCells
         }
         catch {
             $snapshot.AtError = $_.Exception.Message
         }
+
+        $legacyServing = 0
+        foreach ($list in $cellsInfo.ServingCellsGsm, $cellsInfo.ServingCellsUmts, $cellsInfo.ServingCellsTdscdma, $cellsInfo.ServingCellsCdma) {
+            $legacyServing += @($list | Where-Object { $_ }).Count
+        }
+        $snapshot.Downgrade = Get-DowngradeFinding -RegisteredDataClass $snapshot.DataClass `
+            -LegacyServingCount $legacyServing -XmciCells $xmciCells
 
         $umts = @()
         foreach ($cell in $cellsInfo.ServingCellsUmts) {

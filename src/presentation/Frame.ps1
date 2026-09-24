@@ -31,6 +31,21 @@ function Format-CarrierAggregation($Ca) {
     return "$cells ($bw MHz)"
 }
 
+# $Finding: current sample (Get-DowngradeFinding), $Log: Session.DowngradeLog
+function Add-DowngradeLine([System.Collections.Generic.List[object]]$Lines, $Finding, $Log) {
+    if ($Finding -and $Finding.Level -eq 'Alert') {
+        $Lines.Add((New-FrameLine (" !! 2G/3G DOWNGRADE: " + ($Finding.Reasons -join "; ")) "Red"))
+    }
+    elseif ($Finding -and $Finding.Level -eq 'Warning') {
+        $Lines.Add((New-FrameLine (" !  2G/3G cells visible: " + ($Finding.Reasons -join "; ")) "Yellow"))
+    }
+    if ($Log -and ($Log.AlertCount + $Log.WarningCount) -gt 0 -and -not ($Finding -and $Finding.Level -ne 'None')) {
+        $text = " !  2G/3G seen earlier (alert {0} / warning {1} samples), last {2} [{3}]: {4}" -f
+            $Log.AlertCount, $Log.WarningCount, $Log.Last, $Log.LastLevel, ($Log.LastReasons -join "; ")
+        $Lines.Add((New-FrameLine $text "DarkYellow"))
+    }
+}
+
 # Appends one history chart (sparkline rows + stats line) to $Lines.
 # $Scale: @{ Step; MinSpan; Floor; Ceiling } for Get-AutoScale. The scale is computed
 # from the visible (most recent) samples only; its bounds are shown as the axis labels.
@@ -81,12 +96,25 @@ function Get-MonitorFrame {
     $lines.Add((New-FrameLine ($left + (" " * $pad) + $right) "Cyan"))
     $lines.Add((New-FrameLine $rule "Cyan"))
 
+    # 2G/3G downgrade warnings go first so they are never scrolled away
+    Add-DowngradeLine -Lines $lines -Finding $(if ($snapshot) { $snapshot.Downgrade }) -Log $Session.DowngradeLog
+
     # Device
     $lines.Add((New-FrameLine " Model: $($summary.Model)   FW: $($summary.Firmware)"))
     $lines.Add((New-FrameLine " IMEI:  $($summary.Imei)   ICCID: $($summary.SimIccId)   SPN: $($summary.SimSpn)"))
     $lines.Add((New-FrameLine " Radio: $($summary.RadioState)   DataClass: $($summary.DataClass)"))
-    $bandText = if ($null -eq $summary.LteBands) { "n/a" } else { ($summary.LteBands | ForEach-Object { "B$_" }) -join " " }
-    $lines.Add((New-FrameLine " LTE bands: $bandText" "DarkGray"))
+    $rat = $summary.RatConfig
+    if ($null -eq $rat) {
+        $lines.Add((New-FrameLine " RAT: n/a   LTE bands: n/a" "DarkGray"))
+    }
+    else {
+        $legacyBands = @($rat.GsmBands | ForEach-Object { "$_" }) + @($rat.UmtsBands | ForEach-Object { "B$_" })
+        $legacyAllowed = $rat.Allowed -match '2G|3G'
+        $ratText = " RAT: $($rat.Allowed) (prefer $($rat.Preferred))"
+        if ($legacyAllowed) { $ratText += "   2G/3G bands: $($legacyBands -join ' ')   [2G/3G enabled: downgrade possible]" }
+        $lines.Add((New-FrameLine $ratText $(if ($legacyAllowed) { "DarkYellow" } else { "DarkGray" })))
+        $lines.Add((New-FrameLine (" LTE bands: " + (($rat.LteBands | ForEach-Object { "B$_" }) -join " ")) "DarkGray"))
+    }
 
     # Network
     $lines.Add((New-FrameLine (Get-SectionRule "Network" $Width) "DarkCyan"))

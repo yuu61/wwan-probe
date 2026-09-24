@@ -46,16 +46,31 @@ function ConvertFrom-XlecResponse([string]$Response) {
     return [pscustomobject]@{ Cells = $cells; BandwidthsMHz = $bandwidths }
 }
 
-# AT+XACT? -> "+XACT: <...>,<band>,<band>,..." (not in the manual).
-# Values 101..199 are read as 100 + LTE band number, matching +XCCINFO <band_info>
-# (inferred, e.g. band_info 118 while camped on EARFCN 5900 = B18).
+# AT+XACT? -> "+XACT: <AcT>,<PreferredAcT>,<PreferredAcT2>,<band>,<band>,..." (not in the manual).
+# Layout as parsed by ModemManager (src/plugins/xmm/mm-modem-helpers-xmm.c):
+#   AcT / PreferredAcT: 0=2G 1=3G 2=4G 3=2G+3G 4=3G+4G 5=2G+4G 6=2G+3G+4G (third field ignored)
+#   band: <100 = UTRA band, 101..299 = 100 + E-UTRA band, >300 = GSM band in MHz
 function ConvertFrom-XactResponse([string]$Response) {
     $f = Get-AtResponseField $Response 'XACT'
-    if ($null -eq $f) { return $null }
-    $bands = @()
-    foreach ($v in $f) {
+    if ($null -eq $f -or $f.Count -lt 4) { return $null }
+    $modes = @('2G', '3G', '4G', '2G+3G', '3G+4G', '2G+4G', '2G+3G+4G')
+    $act = 0
+    if (-not [int]::TryParse($f[0], [ref]$act) -or $act -ge $modes.Count) { return $null }
+    $preferred = 0
+    $preferredText = if ([int]::TryParse($f[1], [ref]$preferred) -and $preferred -lt $modes.Count) { $modes[$preferred] } else { $null }
+    $gsm = @(); $umts = @(); $lte = @()
+    foreach ($v in ($f | Select-Object -Skip 3)) {
         $n = 0
-        if ([int]::TryParse($v, [ref]$n) -and $n -gt 100 -and $n -lt 200) { $bands += ($n - 100) }
+        if (-not [int]::TryParse($v, [ref]$n)) { continue }
+        if ($n -gt 300) { $gsm += $n }
+        elseif ($n -gt 100) { $lte += ($n - 100) }
+        elseif ($n -gt 0) { $umts += $n }
     }
-    return , $bands
+    return [pscustomobject]@{
+        Allowed   = $modes[$act]   # e.g. "3G+4G"
+        Preferred = $preferredText
+        GsmBands  = $gsm           # MHz values (900, 1800, ...)
+        UmtsBands = $umts          # UTRA band numbers
+        LteBands  = $lte           # E-UTRA band numbers
+    }
 }

@@ -1,8 +1,10 @@
 # Domain: AT+XMCI (Measured Cell Information) response parsing (pure, no I/O).
-# Fibocom L860-GL AT command manual, LTE records:
-#   +XMCI: <TYPE>,<MCC>,<MNC>,<TAC>,<CI>,<PCI>,<DLEARFCN>,<ULEARFCN>,<PATHLOSS>,<RSRP>,<RSRQ>,<RSSNR>,<TA>,<CQI>
-#   TYPE 4 = LTE serving cell, 5 = LTE neighbor cell. Hex fields are quoted "0x...".
-#   RSRP/RSRQ are 3GPP TS 36.133 indices (same scale as the WinRT cell info).
+# Fibocom L860-GL AT command manual 9.1.13:
+#   TYPE 0/1 (GSM serving/neighbor):  <TYPE>,<MCC>,<MNC>,<LAC>,<CI>,<BSIC>,<RXLEV>,<BER>,<ARFCN>,<TARELIABILITY>,<TA>
+#   TYPE 2/3 (UMTS serving/neighbor): <TYPE>,<MCC>,<MNC>,<LAC>,<CI>,<PSC>,<DLUARFCN>,<ULUARFCN>,<PATHLOSS>,<RSSI>,<RSCP>,<ECNO>
+#   TYPE 4/5 (LTE serving/neighbor):  <TYPE>,<MCC>,<MNC>,<TAC>,<CI>,<PCI>,<DLEARFCN>,<ULEARFCN>,<PATHLOSS>,<RSRP>,<RSRQ>,<RSSNR>,<TA>,<CQI>
+#   (TYPE 6..9 = 1xRTT / EvDO, not supported by this module.) Hex fields are quoted "0x...".
+#   LTE RSRP/RSRQ are 3GPP TS 36.133 indices (same scale as the WinRT cell info).
 
 $script:XmciInvalid = [uint32]::MaxValue
 
@@ -14,24 +16,42 @@ function ConvertFrom-XmciHex([string]$text) {
     return $value
 }
 
-# Returns LTE cells ([pscustomobject] with Type = Serving/Neighbor) from an AT+XMCI response.
+function ConvertFrom-XmciNumber([string]$text) {
+    $text = $text.Trim('"')
+    if ($text -match '^0x') { return ConvertFrom-XmciHex $text }
+    $n = 0
+    if ([int]::TryParse($text, [ref]$n)) { return $n }
+    return $null
+}
+
+# Returns cells from an AT+XMCI response as [pscustomobject]:
+#   Rat = GSM/UMTS/LTE, Role = Serving/Neighbor, Channel = ARFCN/UARFCN/EARFCN,
+#   and for LTE also Tac, CellId, Pci, Earfcn, RsrpIdx, RsrqIdx.
 function ConvertFrom-XmciResponse([string]$Response) {
     $cells = @()
     foreach ($line in ($Response -split "`r?`n")) {
         if ($line -notmatch '^\+XMCI:\s*(.+)$') { continue }
         $f = $Matches[1] -split ','
-        if ($f.Count -lt 14) { continue }
-        $type = switch ($f[0]) { '4' { 'Serving' } '5' { 'Neighbor' } default { $null } }
-        if (-not $type) { continue }
-        $cells += [pscustomobject]@{
-            Type    = $type
-            Tac     = ConvertFrom-XmciHex $f[3]
-            CellId  = ConvertFrom-XmciHex $f[4]
-            Pci     = ConvertFrom-XmciHex $f[5]
-            Earfcn  = ConvertFrom-XmciHex $f[6]
-            RsrpIdx = [int]$f[9]
-            RsrqIdx = [int]$f[10]
+        $type = 0
+        if (-not [int]::TryParse($f[0], [ref]$type) -or $type -gt 5) { continue }
+        $rat = @('GSM', 'UMTS', 'LTE')[[math]::Floor($type / 2)]
+        $role = if ($type % 2 -eq 0) { 'Serving' } else { 'Neighbor' }
+        $channelIndex = @{ GSM = 8; UMTS = 6; LTE = 6 }[$rat]
+        $cell = [ordered]@{
+            Rat     = $rat
+            Role    = $role
+            Channel = if ($f.Count -gt $channelIndex) { ConvertFrom-XmciNumber $f[$channelIndex] } else { $null }
         }
+        if ($rat -eq 'LTE') {
+            if ($f.Count -lt 14) { continue }
+            $cell.Tac = ConvertFrom-XmciHex $f[3]
+            $cell.CellId = ConvertFrom-XmciHex $f[4]
+            $cell.Pci = ConvertFrom-XmciHex $f[5]
+            $cell.Earfcn = ConvertFrom-XmciHex $f[6]
+            $cell.RsrpIdx = [int]$f[9]
+            $cell.RsrqIdx = [int]$f[10]
+        }
+        $cells += [pscustomobject]$cell
     }
     return $cells
 }
