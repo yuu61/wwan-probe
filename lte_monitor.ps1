@@ -2,7 +2,7 @@
 # Fibocom L860-GL LTE Signal Monitor (TUI)
 # Usage: .\lte_monitor.ps1 [-Interval 0] [-Count 0] [-CsvPath "log.csv"]
 # Interval=0 means back-to-back sampling (each sample still takes ~1s for counters).
-# Count=0 means infinite loop. CsvPath enables CSV logging.
+# Count=0 means infinite loop. CsvPath enables CSV logging (one row per sample, see src/application/SnapshotLog.ps1).
 # Keys:  q / Esc / Ctrl+C = quit,  p = pause/resume,  r = refresh now,
 #        1-6 = show/hide a history chart (RSRP/RSRQ/SNR/RX/TX/Temp),  g = show/hide all charts
 # Requires PowerShell 7.4+ (Windows). Run .\setup.ps1 once beforehand to download

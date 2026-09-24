@@ -152,7 +152,7 @@ OK
 - 1 コマンドのタイムアウトは 3 秒。タイムアウトしたらそのセッションの残りのコマンドは送らず `$null` にする。
   毎回の更新では `AT+MTSM=1`, `AT+XCESQ?`, `AT+XLEC?`, `AT+XMCI=0` の順に送る (XMCI を最後にして、詰まっても他の値は残す)。
 - 取得できなかった値は `n/a`、近隣セルは `(unavailable: <理由>)` と表示し、サービングセルの表示は継続する。
-- 近隣セル・温度・RSSNR・CA は CSV には出力していない。
+- CSV (`-CsvPath`) には温度・RSSNR・CA (セル数・帯域幅・SCell) も出力する (列は `src/application/SnapshotLog.ps1` 参照)。近隣セルは出力していない。
 - History のグラフは RSRP / RSRQ / SNR / RX / TX / Temp。TUI では `1`〜`6` で個別に、`g` で全部をまとめて表示・非表示を切り替える。
   初期状態は RSRP / RSRQ / SNR のみ表示 (画面の高さを節約するため)。取得できなかった値はグラフ上で空白になる。
 
