@@ -5,6 +5,7 @@
 #          History (ordered name -> List[double], all series the same length, NaN = missing;
 #          see Add-SignalHistory for the series),
 #          DowngradeLog (2G/3G findings seen so far, see Add-DowngradeLog), HandoverLog
+# Statistics (History, HandoverLog, DowngradeLog) can be cleared with Reset-MonitorStatistic.
 
 function Initialize-MonitorSession($Modem, $Config, [int]$HistoryMax = 600) {
     if ($Config.CsvPath) { Initialize-SnapshotLog $Config.CsvPath }
@@ -15,10 +16,25 @@ function Initialize-MonitorSession($Modem, $Config, [int]$HistoryMax = 600) {
         Snapshot     = $null
         History      = New-SignalHistory
         HandoverLog  = New-HandoverLog
-        DowngradeLog = [pscustomobject]@{ AlertCount = 0; WarningCount = 0; Last = $null; LastLevel = $null; LastReasons = @() }
+        DowngradeLog = New-DowngradeLog
         HistoryMax   = $HistoryMax
         Iteration    = 0
     }
+}
+
+# Clears the history charts, handover history and 2G/3G log. Iteration (progress toward
+# Config.Count), the latest snapshot and the CSV log are kept. The handover baseline (the
+# current cell) is kept too, so a cell change across the reset is still detected.
+function Reset-MonitorStatistic {
+    # In-memory session state only; ShouldProcess is not applicable.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
+    param($Session)
+
+    # Clear every series so they stay time-aligned.
+    foreach ($series in $Session.History.Values) { $series.Clear() }
+    $Session.HandoverLog.Entries.Clear()
+    $Session.HandoverLog.Count = 0
+    $Session.DowngradeLog = New-DowngradeLog
 }
 
 # Takes one sample and updates the session (history, CSV).
@@ -117,6 +133,14 @@ function Add-SignalHistory($Session, $Snapshot) {
         $h.Add($(if ($null -eq $value) { [double]::NaN } else { [double]$value }))
         while ($h.Count -gt $Session.HistoryMax) { $h.RemoveAt(0) }
     }
+}
+
+function New-DowngradeLog {
+    # Pure factory (no state change), ShouldProcess is not applicable.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
+    param()
+
+    return [pscustomobject]@{ AlertCount = 0; WarningCount = 0; Last = $null; LastLevel = $null; LastReasons = @() }
 }
 
 # Keeps 2G/3G findings after they disappear, so a brief downgrade is not missed on screen.

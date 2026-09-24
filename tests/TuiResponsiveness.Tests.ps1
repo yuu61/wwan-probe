@@ -123,6 +123,44 @@ finally {
 }
 Write-Output 'PASS: pause, refresh, resume, history, CSV and Count'
 
+# Uppercase R resets the statistics at once, even during sampling, without a refresh;
+# the in-flight sample then starts the new history. Lowercase r refreshes and keeps them.
+$sampler = New-TestSampler -DelayMs 300
+try {
+    $session = New-TestSession -Interval 60
+    $session.Iteration = 2
+    foreach ($series in $session.History.Values) { $series.Add(1); $series.Add(2) }
+    $session.HandoverLog.Entries.Add([pscustomobject]@{ Number = 5 })
+    $session.HandoverLog.Count = 5
+    $session.DowngradeLog.AlertCount = 3
+    $view = New-TestView
+    $view.HandoverOffset = 4
+    $script:stage = 0
+    $script:onFrame = {
+        param($Session, $View)
+        if ($script:stage -eq 0) { Add-TestKey R 'R'; $script:stage = 1 }
+        elseif ($script:stage -eq 1) {
+            $emptied = @($Session.History.Values | Where-Object { $_.Count -gt 0 }).Count -eq 0
+            Assert-True ($emptied -and $Session.HandoverLog.Count -eq 0 -and $Session.HandoverLog.Entries.Count -eq 0) 'Reset kept history.'
+            Assert-True ($Session.DowngradeLog.AlertCount -eq 0 -and $View.HandoverOffset -eq 0) 'Reset kept the 2G/3G log or page.'
+            Assert-True ($Session.Iteration -eq 2 -and $View.Fetching -and -not $View.RefreshRequested) 'Reset changed progress or sampling.'
+            $script:stage = 2
+        }
+        elseif ($script:stage -eq 2 -and $Session.Iteration -eq 3) {
+            Assert-True ($Session.History.Rsrp.Count -eq 1 -and $Session.History.TempC.Count -eq 1) 'In-flight sample was not kept after reset.'
+            Add-TestKey R 'r'; $script:stage = 3
+        }
+        elseif ($script:stage -eq 3 -and $Session.Iteration -eq 4) {
+            Assert-True ($Session.History.Rsrp.Count -eq 2) 'Lowercase r reset the statistics.'
+            Add-TestKey Q 'q'
+        }
+    }
+    Invoke-TuiLoop $session $view $sampler
+    Assert-True ($script:stage -eq 3 -and $session.Iteration -eq 4) 'Reset or refresh sequence did not complete.'
+}
+finally { Remove-MonitorSampler $sampler }
+Write-Output 'PASS: R resets statistics during sampling; r only refreshes'
+
 # Interval=0 must keep sampling, but never start concurrent requests.
 $sampler = New-TestSampler -DelayMs 50
 try {
