@@ -139,6 +139,53 @@ try {
 finally { Remove-MonitorSampler $sampler }
 Write-Output 'PASS: back-to-back sampling and concurrency guard'
 
+# A caught cmdlet error can set HadErrors without leaving an error record.
+# Both this snapshot and a subsequent sample must still reach the UI.
+$sampler = New-TestSampler -DelayMs 0
+try {
+    $sampler.Pipeline.Commands.Clear()
+    $null = $sampler.Pipeline.AddScript({
+        $script:OriginalSnapshot = ${function:Get-LteSnapshot}
+        function Get-LteSnapshot($Modem) {
+            try { Get-Item -LiteralPath 'MissingMonitorTestDrive:/missing' -ErrorAction Stop }
+            catch { }
+            & $script:OriginalSnapshot $Modem
+        }
+    }).Invoke()
+    $session = New-TestSession -Count 2
+    $view = New-TestView
+    $script:onFrame = { param($Session, $View) }
+    Invoke-TuiLoop $session $view $sampler
+    Assert-True $sampler.Pipeline.HadErrors 'The handled cmdlet error was not reproduced.'
+    Assert-True ($sampler.Pipeline.Streams.Error.Count -eq 0) 'Handled error escaped into the error stream.'
+    Assert-True ($session.Iteration -eq 2 -and $session.History.Rsrp.Count -eq 2) 'Handled error interrupted sampling.'
+    Assert-True ($null -eq $sampler.Pending) 'Completed invocation was not released.'
+}
+finally { Remove-MonitorSampler $sampler }
+Write-Output 'PASS: handled worker errors do not interrupt sampling'
+
+# An unhandled nonterminating error must still be reported even with a snapshot.
+$sampler = New-TestSampler -DelayMs 0
+try {
+    $sampler.Pipeline.Commands.Clear()
+    $null = $sampler.Pipeline.AddScript({
+        $script:OriginalSnapshot = ${function:Get-LteSnapshot}
+        function Get-LteSnapshot($Modem) {
+            Write-Error 'nonterminating test failure' -ErrorAction Continue
+            & $script:OriginalSnapshot $Modem
+        }
+    }).Invoke()
+    Start-MonitorSample $sampler $null
+    while (-not $sampler.Pending.IsCompleted) { Start-Sleep -Milliseconds 25 }
+    $reported = $false
+    try { $null = Receive-MonitorSample $sampler }
+    catch { $reported = $_.Exception.Message -match 'nonterminating test failure' }
+    Assert-True $reported 'Nonterminating worker error was swallowed.'
+    Assert-True ($null -eq $sampler.Pending) 'Failed invocation was not released.'
+}
+finally { Remove-MonitorSampler $sampler }
+Write-Output 'PASS: nonterminating worker error propagation and cleanup'
+
 # Worker errors must be surfaced, and the pending invocation must be released.
 $sampler = New-TestSampler
 try {

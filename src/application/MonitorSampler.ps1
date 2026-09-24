@@ -16,7 +16,7 @@ function New-MonitorSampler {
             )) { . (Join-Path $SourceRoot $file) }
         }).AddArgument((Split-Path $PSScriptRoot -Parent))
         $null = $pipeline.Invoke()
-        if ($pipeline.HadErrors) { throw $pipeline.Streams.Error[0] }
+        if ($pipeline.Streams.Error.Count -gt 0) { throw $pipeline.Streams.Error[0] }
         $pipeline.Commands.Clear()
         return [pscustomobject]@{ Pipeline = $pipeline; Pending = $null }
     }
@@ -44,7 +44,10 @@ function Receive-MonitorSample($Sampler) {
     }
     try {
         $result = $Sampler.Pipeline.EndInvoke($Sampler.Pending)
-        if ($Sampler.Pipeline.HadErrors) { throw $Sampler.Pipeline.Streams.Error[0] }
+        # HadErrors can be true for errors already handled by the worker (e.g.
+        # unavailable counters). Only propagate errors left in the stream;
+        # throwing an empty stream's first element raises an unrelated ScriptHalted.
+        if ($Sampler.Pipeline.Streams.Error.Count -gt 0) { throw $Sampler.Pipeline.Streams.Error[0] }
         if ($result.Count -ne 1) { throw 'Expected one completed snapshot.' }
         return $result[0]
     }
