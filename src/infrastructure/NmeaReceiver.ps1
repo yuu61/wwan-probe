@@ -6,7 +6,8 @@
 #
 # State file (JSON, written by the helper, no coordinates):
 #   @{ Status = 'Starting' | 'Receiving' | 'Error'; Error; UpdatedUnixMs (heartbeat);
-#      NmeaUnixMs (last valid sentence, $null = none yet); Satellites; UsedCount }
+#      NmeaUnixMs (last valid sentence, $null = none yet); Satellites; UsedCount; Fix }
+#   Satellites / Fix: see Nmea.ps1.
 
 function Test-Administrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -81,6 +82,7 @@ function Stop-NmeaReceiver {
 
 # Pure conversion of the helper state for display and tests.
 #   Status: Starting | Receiving | Stale (heartbeat older than 10 s) | Unavailable (Error)
+#   Fix = the receiver's fix state (Nmea.ps1), $null unless Receiving;
 #   InView = distinct satellites, Used = distinct satellites in the fix,
 #   Systems = ordered @{ <system> = @{ InView; Used } } in display order.
 function ConvertFrom-NmeaState {
@@ -88,7 +90,7 @@ function ConvertFrom-NmeaState {
 
     $observation = [pscustomobject]@{
         Status = 'Starting'; Error = $null; UpdatedUtc = $null; NmeaReceived = $false
-        Satellites = @(); InView = 0; Used = 0; Systems = [ordered]@{}
+        Satellites = @(); InView = 0; Used = 0; Systems = [ordered]@{}; Fix = $null
     }
     if ($ReceiverError) { $observation.Status = 'Unavailable'; $observation.Error = $ReceiverError; return $observation }
     if ($State.Status -eq 'Error') { $observation.Status = 'Unavailable'; $observation.Error = $State.Error; return $observation }
@@ -106,6 +108,7 @@ function ConvertFrom-NmeaState {
     $observation.NmeaReceived = $null -ne $State.NmeaUnixMs
     $observation.Satellites = @($State.Satellites)
     $observation.Used = [int]$State.UsedCount
+    $observation.Fix = $State.Fix
     $observation.InView = @($observation.Satellites | ForEach-Object { "$($_.System):$($_.Id)" } | Select-Object -Unique).Count
     foreach ($system in $script:NmeaSystems) {
         $members = @($observation.Satellites | Where-Object System -EQ $system)

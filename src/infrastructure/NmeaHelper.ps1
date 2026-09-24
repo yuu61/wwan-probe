@@ -1,8 +1,8 @@
 #Requires -Version 7.4
 # Elevated NMEA helper started by Start-NmeaReceiver (NmeaReceiver.ps1); not for direct use.
 # Keeps a Windows location session (Geolocator) so the GNSS engine runs, enables the driver's
-# NMEA logging on the first GNSS device and publishes GSV/GSA satellites to
-# <StateDir>\state.json about once a second. Stops when <StateDir>\stop appears or the monitor
+# NMEA logging on the first GNSS device and publishes the satellites and fix state (never the
+# coordinates) to <StateDir>\state.json about once a second. Stops when <StateDir>\stop appears or the monitor
 # process ends, then restores NMEA logging to disabled and removes <StateDir>.
 # On a failure it keeps the state file with Status = 'Error' for the monitor to show.
 param(
@@ -17,7 +17,7 @@ $sourceRoot = Split-Path $PSScriptRoot -Parent
 
 $statePath = Join-Path $StateDir 'state.json'
 $stopPath = Join-Path $StateDir 'stop'
-$state = [ordered]@{ Status = 'Starting'; Error = $null; UpdatedUnixMs = 0; NmeaUnixMs = $null; Satellites = @(); UsedCount = 0 }
+$state = [ordered]@{ Status = 'Starting'; Error = $null; UpdatedUnixMs = 0; NmeaUnixMs = $null; Satellites = @(); UsedCount = 0; Fix = $null }
 $parent = $null
 $lock = $null
 $device = $null
@@ -59,6 +59,7 @@ try {
             $report = Get-NmeaSatelliteReport $satellites $now
             $state.Satellites = $report.Satellites
             $state.UsedCount = $report.UsedCount
+            $state.Fix = $report.Fix
             $state.UpdatedUnixMs = $now.ToUnixTimeMilliseconds()
             # A monitor reading the file at this moment only delays the update.
             $dirty = -not (Write-NmeaState $statePath $state)

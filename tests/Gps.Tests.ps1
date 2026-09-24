@@ -16,12 +16,13 @@ $coordinate = [pscustomobject]@{
         AltitudeReferenceSystem = 'Ellipsoid'
     }
     Accuracy = 4.5; AltitudeAccuracy = 8; Speed = 0; Heading = 0
-    SatelliteData = [pscustomobject]@{ HorizontalDilutionOfPrecision = 1.2 }
+    SatelliteData = [pscustomobject]@{ HorizontalDilutionOfPrecision = 1.2; PositionDilutionOfPrecision = 1.9; VerticalDilutionOfPrecision = 1.5 }
 }
 $reading = [pscustomobject]@{ Status = 'Ready'; Coordinate = $coordinate; Error = $null }
 $fix = ConvertFrom-GpsReading $reading -Now $now
 Assert-True ($fix.Status -eq 'Fix' -and $fix.Latitude -eq 35.123456 -and $fix.Longitude -eq 139.123456) 'Satellite coordinates lost precision.'
 Assert-True ($fix.AltitudeM -eq 0 -and $fix.SpeedMps -eq 0 -and $fix.HeadingDeg -eq 0 -and $fix.Hdop -eq 1.2) 'Valid zero or HDOP was lost.'
+Assert-True ($fix.Pdop -eq 1.9 -and $fix.Vdop -eq 1.5) 'PDOP or VDOP was lost.'
 Assert-True ($fix.Timestamp -eq '2026-09-24T12:00:00.0000000+00:00') 'GPS time is not UTC.'
 
 foreach ($source in 'WiFi', 'Cellular', 'IPAddress', 'Default', 'Unknown', 'Obfuscated') {
@@ -58,7 +59,7 @@ $coordinate.AltitudeAccuracy = $null
 $coordinate.SatelliteData = $null
 $gps = ConvertFrom-GpsReading $reading -Now $now
 Assert-True ($gps.Status -eq 'Fix' -and $gps.Latitude -eq 0 -and $gps.Longitude -eq 0) 'Zero coordinates were treated as missing.'
-Assert-True ($null -eq $gps.SpeedMps -and $null -eq $gps.HeadingDeg -and $null -eq $gps.AccuracyM -and $null -eq $gps.AltitudeM -and $null -eq $gps.Hdop) 'Unavailable numeric values became zero.'
+Assert-True ($null -eq $gps.SpeedMps -and $null -eq $gps.HeadingDeg -and $null -eq $gps.AccuracyM -and $null -eq $gps.AltitudeM -and $null -eq $gps.Hdop -and $null -eq $gps.Pdop -and $null -eq $gps.Vdop) 'Unavailable numeric values became zero.'
 Assert-True ($null -eq (Get-GpsObservation $null)) 'GPS was queried without opt-in.'
 $gps = Get-GpsObservation ([pscustomobject]@{ Client = $null; Error = 'access denied' })
 Assert-True ($gps.Status -eq 'Unavailable' -and $gps.Error -eq 'access denied') 'Startup failure was not exposed.'
@@ -94,7 +95,8 @@ $text = (Get-MonitorFrame $session $view 100).Body.Text -join "`n"
 Assert-True ($text -match 'GPS: Unavailable \(GPS unavailable\)') 'GPS failure is missing from the shared TUI/plain frame.'
 $snapshot.Gps = $fix
 $text = (Get-MonitorFrame $session $view 100).Body.Text -join "`n"
-Assert-True ($text -match 'Lat: 35[.,]123456   Lon: 139[.,]123456' -and $text -match 'Source: Satellite') 'GPS fix is missing from the frame.'
+Assert-True ($text -match 'Lat: 35[.,]123456   Lon: 139[.,]123456' -and $text -match 'Source: Satellite' -and
+    $text -match 'HDOP: 1[.,]2   PDOP: 1[.,]9   VDOP: 1[.,]5') 'GPS fix is missing from the frame.'
 $csvPath = [IO.Path]::GetTempFileName()
 try {
     Initialize-SnapshotLog $csvPath

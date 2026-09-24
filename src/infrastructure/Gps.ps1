@@ -44,7 +44,7 @@ function ConvertFrom-GpsReading($Reading, [DateTimeOffset]$Now = [DateTimeOffset
     $gps = [pscustomobject]@{
         Status = 'NoFix'; Source = ''; Timestamp = $null
         Latitude = $null; Longitude = $null; AltitudeM = $null; AccuracyM = $null
-        SpeedMps = $null; HeadingDeg = $null; Hdop = $null; Error = $null
+        SpeedMps = $null; HeadingDeg = $null; Hdop = $null; Pdop = $null; Vdop = $null; Error = $null
     }
     if ($Reading.Error) {
         $gps.Status = 'Unavailable'
@@ -83,6 +83,8 @@ function ConvertFrom-GpsReading($Reading, [DateTimeOffset]$Now = [DateTimeOffset
     $gps.SpeedMps = ConvertTo-GpsNumber $c.Speed -Min 0
     $gps.HeadingDeg = ConvertTo-GpsNumber $c.Heading -Min 0 -Max 360
     $gps.Hdop = ConvertTo-GpsNumber $c.SatelliteData.HorizontalDilutionOfPrecision -Min 0
+    $gps.Pdop = ConvertTo-GpsNumber $c.SatelliteData.PositionDilutionOfPrecision -Min 0
+    $gps.Vdop = ConvertTo-GpsNumber $c.SatelliteData.VerticalDilutionOfPrecision -Min 0
     return $gps
 }
 

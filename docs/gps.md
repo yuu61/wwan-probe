@@ -1,8 +1,9 @@
 # GPS / GNSS の取得と表示
 
 `pwsh -File .\lte_monitor.ps1 -Gps` で GPS 欄を有効にします。
-通常画面とプレーン出力に、緯度・経度 (十進度)、高度 (m)、水平精度 (m)、速度 (m/s)、方位 (度)、HDOP、測位時刻 (UTC) を表示します。
-未取得の値は `n/a` です。高度はドライバーの高度基準による値で、海抜とは限りません。
+通常画面とプレーン出力に、緯度・経度 (十進度)、高度 (m)、水平精度 (m)、速度 (m/s)、方位 (度)、HDOP / PDOP / VDOP、測位時刻 (UTC) を表示します。
+未取得の値は `n/a` です。高度はドライバーの高度基準による値で、海抜とは限りません (`-Nmea` では GGA の海抜高度も表示します)。
+DOP (精度低下率) は Windows の `GeocoordinateSatelliteData` の値で、小さいほど衛星配置が良いことを示します。
 GPS は指定したときだけ開始し、終了時に購読を解除します。
 `-Nmea` を付けると、管理者権限の NMEA 経路で捕捉衛星の一覧も表示します ([衛星一覧](#衛星一覧--nmea))。
 
@@ -45,6 +46,25 @@ GPS の失敗は LTE 測定やハンドオーバー判定に影響しません�
 起動時に一度だけ UAC で NMEA 受信ヘルパーを昇格させ、TUI の `s` で衛星一覧と通常画面を切り替えます。
 UAC の確認は TUI の表示前に行います。拒否しても LTE と GPS 欄の監視は続き、衛星欄に理由を表示します。
 通常画面の GPS 欄には `Satellites: 18 in view (GPS 12, GLONASS 6), 6 used  [s]` のような要約を表示します。
+要約の下に、受信機の測位状態を2行で表示します (`s` の一覧にも表示)。
+
+```text
+ Fix (NMEA): 3D   Quality: GPS   Mode: Autonomous (valid)   Sats used: 13
+ Altitude MSL: 14.6 m   Geoid separation: 39.4 m
+```
+
+| 項目 | 出典 | 意味 |
+| --- | --- | --- |
+| Fix (NMEA) | GSA | 測位の次元。`NoFix` / `2D` / `3D` |
+| Quality | GGA | 測位品質。`Invalid` / `GPS` (単独測位) / `DGPS` / `PPS` / `RTK fixed` / `RTK float` / `Estimated` (推測航法) / `Manual` / `Simulation` |
+| Mode | RMC | 測位モード。`Autonomous` / `Differential` / `Estimated` / `RTK float` / `RTK fixed` / `Precise` / `Manual` / `Simulator` / `Not valid`。括弧内は RMC の状態 (`valid` = A, `invalid` = V) |
+| Sats used | GGA | 受信機が測位に使った衛星数 |
+| Altitude MSL | GGA | 平均海面 (ジオイド) からの高さ |
+| Geoid separation | GGA | ジオイド高 (楕円体からジオイドまでの高さ)。海抜高度に加えると楕円体高になります |
+
+一覧にない符号は `Unknown (符号)` と表示します。10秒間届いていない文の値は `n/a` に戻します。
+GP と GN の両方の文が届く場合は、複数衛星系を合わせた解である GN を優先します。
+海抜高度と測位状態は受信機の報告をそのまま表示するもので、値の正確さは検証していません。
 `s` の一覧と `h` のハンドオーバー履歴は同時には開かず、一方を開くと他方は閉じます。
 
 | 一覧の列 | 意味 |
@@ -59,10 +79,10 @@ UAC の確認は TUI の表示前に行います。拒否しても LTE と GPS �
 一覧は衛星と信号の組ごとに1行で、画面に収まらない場合は `↑` / `↓` でスクロールします。
 要約の `in view` は重複を除いた衛星数、`used` は GSA の使用衛星数です (GPGSA と GNGSA に同じ衛星があっても1基と数えます)。
 衛星系は GSV の送信元 (GL=GLONASS 等) で判定し、GP / GN では NMEA の番号範囲 (1–32 GPS, 33–64・120–158 SBAS, 65–96 GLONASS, 193–202 QZSS) で判定します。
-GSA の DOP は表示しません。GPS 欄の HDOP は従来どおり Windows (Geolocator) の値です。
+GSA の DOP は表示しません。GPS 欄の HDOP / PDOP / VDOP は Windows (Geolocator) の値です。
 
 GSV は 1..N のメッセージが順番どおりそろった周期だけを採用します。10秒間更新のない衛星系の GSV・GSA は一覧から外します。
-画面への反映は LTE 測定の更新時です。衛星一覧の失敗は LTE 測定と GPS 欄に影響しません。CSV には衛星一覧を記録しません。
+画面への反映は LTE 測定の更新時です。衛星一覧の失敗は LTE 測定と GPS 欄に影響しません。CSV には衛星一覧と NMEA の測位状態を記録しません。
 
 | 表示 | 意味 |
 | --- | --- |
@@ -76,7 +96,7 @@ GSV は 1..N のメッセージが順番どおりそろった周期だけを採�
 - ヘルパー (`src/infrastructure/NmeaHelper.ps1`) は非表示の `pwsh` で動作します。モニターが管理者なら UAC なしで起動します。
   子プロセスには呼び出し元と同じ実行ポリシーを渡します。
 - ヘルパーは高精度の Geolocator を購読して Windows に測位セッションを任せます。最初の GNSS デバイスで NMEA ロギングを有効にし、GSV / GSA だけを解析します。
-- 結果は約1秒ごとに `%TEMP%\wwan-nmea-<GUID>\state.json` を置き換えて書き込み、モニターが読み取ります。緯度・経度 (GGA / RMC) は書き込みません。
+- 結果は約1秒ごとに `%TEMP%\wwan-nmea-<GUID>\state.json` を置き換えて書き込み、モニターが読み取ります。GGA / RMC からは上記の測位状態の項目だけを読み、緯度・経度と時刻は書き込みません。
   モニターの読み取りと重なった書き込みは失敗するため、次の周期で再試行します。
 - 通常権限のモニターは昇格したヘルパーを終了できません。終了時は停止ファイルで依頼し、最大5秒待ちます。
   ヘルパーはモニターのプロセス終了 (PID と起動時刻で確認) も約1秒ごとに確認するため、モニターの強制終了後も自分で終了します。

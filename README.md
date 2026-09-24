@@ -12,7 +12,7 @@ Windows の PowerShell 7.4 以降で動作します。
 - **近隣セル情報の表示**: モデムの AT コマンド (L860-GL は MBIM の Intel AT Tunnel 経由の `AT+XMCI`) で近隣セル (Neighbor cells) の情報を取得・表示。AT で取れない場合は WinRT が報告する近隣セルを使用 (詳細は [`docs/neighbor-cells.md`](docs/neighbor-cells.md) 参照)
 - **複数ベンダーの AT コマンド**: 起動時に AT の経路 (Intel / Fibocom / Compal / Quectel の MBIM サービス、または COM ポート) とコマンドセット (Intel `+X`、Quectel `+Q`、Fibocom `+GT`) を自動判定 (詳細は [`docs/modem-support.md`](docs/modem-support.md) 参照)
 - **ハンドオーバー履歴**: LTE 主セルの変更を検出し、時刻と切り替え先の Cell ID・バンド・PCI などを表示
-- **GPS / GNSS 表示**: `-Gps` で衛星測位の緯度・経度・高度・精度・速度・方位・HDOP・測位時刻を表示。未測位や取得不能も表示。`-Nmea` で捕捉衛星の一覧 (衛星系ごとに色分け、仰角・方位角・SNR・測位への使用) も表示 (詳細は [`docs/gps.md`](docs/gps.md) 参照)
+- **GPS / GNSS 表示**: `-Gps` で衛星測位の緯度・経度・高度・精度・速度・方位・HDOP / PDOP / VDOP・測位時刻を表示。未測位や取得不能も表示。`-Nmea` で捕捉衛星の一覧 (衛星系ごとに色分け、仰角・方位角・SNR・測位への使用) と、受信機の測位状態 (2D / 3D・測位品質・測位モード・使用衛星数・海抜高度とジオイド高) も表示 (詳細は [`docs/gps.md`](docs/gps.md) 参照)
 - **CSV ログ出力**: 取得した情報を CSV ファイルに記録可能
 
 ## 必須要件

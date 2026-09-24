@@ -60,6 +60,36 @@ Assert-True ($later.Satellites.Count -eq 0 -and $later.UsedCount -eq 0) 'Expired
 Assert-True ((Get-NmeaSatelliteSystem 'GP' 40) -eq 'SBAS' -and (Get-NmeaSatelliteSystem 'GP' 194) -eq 'QZSS' -and (Get-NmeaSatelliteSystem 'GA' 5) -eq 'Galileo') 'Constellation mapping is wrong.'
 Write-Output 'PASS: GSV cycles, GSA usage union, aging and constellations'
 
+# Fix state from GGA / RMC / GSA: real L860-GL field values (2026-09-25) with dummy coordinates.
+function New-TestSentence([string]$Body) {
+    $checksum = 0
+    foreach ($character in $Body.ToCharArray()) { $checksum = $checksum -bxor [int]$character }
+    return '${0}*{1:X2}' -f $Body, $checksum
+}
+$fixState = New-NmeaSatelliteState
+foreach ($body in 'GNGGA,205350.033,3500.0000,N,13900.0000,E,1,13,0.82,14.600,M,39.432,M,,',
+    'GNRMC,205349.083,A,3500.0000,N,13900.0000,E,26.136,300.9,240926,,,A,V',
+    'GNGSA,A,3,65,88,66,81,,,,,,,,,1.36,0.79,1.11,2') {
+    Add-NmeaSentence $fixState (New-TestSentence $body) $now
+}
+$fix = (Get-NmeaSatelliteReport $fixState $now).Fix
+$goodFix = $fix
+Assert-True ($fix.Dimension -eq '3D' -and $fix.Quality -eq 'GPS' -and $fix.SatellitesUsed -eq 13) 'GSA / GGA fix fields were misread.'
+Assert-True ($fix.AltitudeMslM -eq 14.6 -and $fix.GeoidSeparationM -eq 39.432 -and $fix.Valid -and $fix.Mode -eq 'Autonomous') 'GGA altitude or RMC status was misread.'
+Assert-True (((Get-NmeaSatelliteReport $fixState $now) | ConvertTo-Json -Depth 5) -notmatch '3500|13900|205350') 'The report leaked GGA / RMC position or time fields.'
+# A GP duplicate does not override the combined GN solution; unknown codes stay visible.
+Add-NmeaSentence $fixState (New-TestSentence 'GPGGA,205351.033,3500.0000,N,13900.0000,E,2,05,0.82,,M,,M,,') $now
+Add-NmeaSentence $fixState (New-TestSentence 'GNRMC,205352.083,V,,,,,,,240926,,,X,V') $now
+$fix = (Get-NmeaSatelliteReport $fixState $now).Fix
+Assert-True ($fix.Quality -eq 'GPS' -and $fix.SatellitesUsed -eq 13) 'A GP sentence replaced the GN solution.'
+Assert-True ($fix.Valid -eq $false -and $fix.Mode -eq 'Unknown (X)') 'An invalid RMC or unknown mode was hidden.'
+Add-NmeaSentence $fixState (New-TestSentence 'GNGGA,205353.033,,,,,0,00,,,M,,M,,') $now
+$fix = (Get-NmeaSatelliteReport $fixState $now).Fix
+Assert-True ($fix.Quality -eq 'Invalid' -and $fix.SatellitesUsed -eq 0 -and $null -eq $fix.AltitudeMslM) 'A no-fix GGA kept the old altitude.'
+$fix = (Get-NmeaSatelliteReport $fixState $now.AddSeconds(11)).Fix
+Assert-True ($null -eq $fix.Dimension -and $null -eq $fix.Quality -and $null -eq $fix.Valid) 'Expired fix values were kept.'
+Write-Output 'PASS: GGA / RMC / GSA fix state, GN preference, aging and no coordinates'
+
 # Helper state file round trip. A replace during a read fails softly and succeeds on retry.
 $directory = Join-Path ([IO.Path]::GetTempPath()) "wwan-nmea-test-$([guid]::NewGuid().ToString('N'))"
 $null = New-Item -ItemType Directory -Path $directory
@@ -68,7 +98,7 @@ try {
     Assert-True ($null -eq (Read-NmeaState $path)) 'A missing state file was not treated as not yet published.'
     $published = [ordered]@{
         Status = 'Receiving'; Error = $null; UpdatedUnixMs = $now.ToUnixTimeMilliseconds(); NmeaUnixMs = $now.ToUnixTimeMilliseconds()
-        Satellites = $report.Satellites; UsedCount = $report.UsedCount
+        Satellites = $report.Satellites; UsedCount = $report.UsedCount; Fix = $goodFix
     }
     Assert-True (Write-NmeaState $path $published) 'State was not written.'
     $held = [IO.File]::Open($path, 'Open', 'Read', [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete)
@@ -80,6 +110,7 @@ try {
 finally { Remove-Item -LiteralPath $directory -Recurse -Force }
 Assert-True ($observation.Status -eq 'Receiving' -and $observation.InView -eq 18 -and $observation.Used -eq 7) 'State round trip lost counts.'
 Assert-True (($observation.Systems.Keys -join ',') -eq 'GPS,GLONASS' -and $observation.Systems.GPS.InView -eq 12 -and $observation.Systems.GLONASS.Used -eq 2) 'Per-constellation counts are wrong.'
+Assert-True ($observation.Fix.Dimension -eq '3D' -and $observation.Fix.AltitudeMslM -eq 14.6 -and $observation.Fix.Valid) 'The fix state did not survive the state file.'
 
 $receiving = [pscustomobject]@{ Status = 'Receiving'; UpdatedUnixMs = $now.ToUnixTimeMilliseconds(); NmeaUnixMs = $null; Satellites = @(); UsedCount = 0 }
 Assert-True ((ConvertFrom-NmeaState $null -Now $now).Status -eq 'Starting') 'A helper without a report was not Starting.'
@@ -121,6 +152,8 @@ $view = @{ Unicode = $false; LastHeight = 30 }
 $frame = Get-MonitorFrame $session $view 100
 $text = $frame.Body.Text -join "`n"
 Assert-True ($text -match 'Satellites: 18 in view \(GPS 12, GLONASS 6\), 7 used  \[s\]' -and $frame.Footer.Text -match '\[s\] Satellites') 'The satellite summary or key is missing.'
+Assert-True ($text -match 'Fix \(NMEA\): 3D   Quality: GPS   Mode: Autonomous \(valid\)   Sats used: 13' -and
+    $text -match 'Altitude MSL: 14[.,]6 m   Geoid separation: 39[.,]4 m') 'The NMEA fix lines are missing.'
 $view.SatelliteVisible = $true
 $frame = Get-MonitorFrame $session $view 100
 $rows = @($frame.Body | Where-Object { $_.Text -match '^ (GPS|GLONASS) ' })
@@ -130,7 +163,7 @@ Assert-True ($rows[0].Text -match '^ GPS +1 +1 +59 +199 +n/a +\[ +not tracked +\
 $view.LastHeight = 12
 $view.SatelliteOffset = 99
 $frame = Get-MonitorFrame $session $view 100
-Assert-True ($view.SatelliteOffset -eq 14 -and $frame.Body.Count -le 12 -and ($frame.Body.Text -join "`n") -match 'Rows 15-18 / 18') 'Satellite scrolling does not fit the screen.'
+Assert-True ($view.SatelliteOffset -eq 16 -and $frame.Body.Count -le 12 -and ($frame.Body.Text -join "`n") -match 'Rows 17-18 / 18') 'Satellite scrolling does not fit the screen.'
 $session.NmeaReceiver = $null
 $snapshot.Satellites = $null
 $text = (Get-MonitorFrame $session $view 100).Body.Text -join "`n"
