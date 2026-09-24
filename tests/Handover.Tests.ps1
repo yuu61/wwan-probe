@@ -2,10 +2,10 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 foreach ($file in @(
-    'src/domain/Signal.ps1', 'src/domain/Band.ps1', 'src/domain/Downgrade.ps1',
-    'src/application/Snapshot.ps1', 'src/application/MonitorSession.ps1',
-    'src/presentation/Gauge.ps1', 'src/presentation/Frame.ps1', 'src/presentation/TuiMonitor.ps1'
-)) { . (Join-Path $root $file) }
+        'src/domain/Signal.ps1', 'src/domain/Band.ps1', 'src/domain/Downgrade.ps1',
+        'src/application/Snapshot.ps1', 'src/application/MonitorSession.ps1',
+        'src/presentation/Gauge.ps1', 'src/presentation/Frame.ps1', 'src/presentation/TuiMonitor.ps1'
+    )) { . (Join-Path $root $file) }
 
 function Assert-True($Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }

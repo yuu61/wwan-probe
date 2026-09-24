@@ -3,11 +3,11 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 foreach ($file in @(
-    'src/domain/Signal.ps1', 'src/domain/Band.ps1', 'src/domain/CellMeasurement.ps1',
-    'src/domain/ModemStatus.ps1', 'src/domain/QuectelStatus.ps1', 'src/domain/FibocomStatus.ps1',
-    'src/domain/AtProfile.ps1', 'src/domain/Downgrade.ps1', 'src/infrastructure/WinRt.ps1',
-    'src/infrastructure/Modem.ps1'
-)) { . (Join-Path $root $file) }
+        'src/domain/Signal.ps1', 'src/domain/Band.ps1', 'src/domain/CellMeasurement.ps1',
+        'src/domain/ModemStatus.ps1', 'src/domain/QuectelStatus.ps1', 'src/domain/FibocomStatus.ps1',
+        'src/domain/AtProfile.ps1', 'src/domain/Downgrade.ps1', 'src/infrastructure/WinRt.ps1',
+        'src/infrastructure/Modem.ps1'
+    )) { . (Join-Path $root $file) }
 
 function Assert-True($Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
@@ -124,10 +124,10 @@ Assert-Equal @(20) $status.Ca.BandwidthsMHz 'Quectel DL bandwidth index 5 = 20 M
 Assert-Equal 30 (ConvertFrom-QtempResponse (New-AtResponse '+QTEMP: 30,28,27')) 'EM12/EG25 QTEMP layout (forum example)'
 
 $endc = ConvertFrom-QengServingResponse (New-AtResponse @(
-            '+QENG: "servingcell","NOCONN"'
-            '+QENG: "LTE","FDD",460,01,5F1EA15,12,1650,3,5,5,DE10,-99,-12,-67,11,9,230,-'
-            '+QENG:"NR5G-NSA",460,01,747,-71,13,-11,627264,78,12,1'
-        ))
+        '+QENG: "servingcell","NOCONN"'
+        '+QENG: "LTE","FDD",460,01,5F1EA15,12,1650,3,5,5,DE10,-99,-12,-67,11,9,230,-'
+        '+QENG:"NR5G-NSA",460,01,747,-71,13,-11,627264,78,12,1'
+    ))
 Assert-Equal 'LTE,NR' ($endc.Rat -join ',') 'Quectel EN-DC cells'
 Assert-Equal 1650 $endc[0].Earfcn 'Quectel EN-DC LTE EARFCN (shifted layout)'
 Assert-Equal -99 $endc[0].RsrpDbm 'Quectel EN-DC LTE RSRP'
@@ -271,12 +271,12 @@ function Invoke-ModemAtCommand($Modem, $Channel, [string[]]$Command, [int]$Timeo
 }
 $script:sent = [System.Collections.Generic.List[string]]::new()
 
-$script:mockAt = @{ 'Intel AT Tunnel' = { param($c) $null } }
+$script:mockAt = @{ 'Intel AT Tunnel' = { $null } }
 $at = Initialize-ModemAt $null ''
 Assert-True ($at.Channel.Name -eq 'Intel AT Tunnel' -and $at.Channel.Unconfirmed -and $at.Profile.Id -eq 'Intel' -and $null -eq $at.Error) 'Intel AT Tunnel with lost answers must keep the Intel set'
 Assert-Equal 2 $script:sent.Count 'A silent Intel AT Tunnel gets only the two AT tries, no profile probes'
 Assert-True (-not $script:MbimAtChannels[0].psobject.Properties['Unconfirmed']) 'The channel table must not be modified'
-$script:mockAt = @{ 'Intel AT Tunnel' = { param($c) '' } }
+$script:mockAt = @{ 'Intel AT Tunnel' = { '' } }
 Assert-Equal 'Intel' (Initialize-ModemAt $null '').Profile.Id 'Intel AT Tunnel with empty answers must keep the Intel set'
 $script:mockAt = @{ 'Intel AT Tunnel' = { param($c) if ($c -eq 'AT') { New-AtResponse @() } } }
 $at = Initialize-ModemAt $null ''
@@ -285,7 +285,7 @@ $script:mockAt = @{ 'Fibocom AT' = { param($c) if ($c -in 'AT', 'AT+GTCAINFO=?')
 $at = Initialize-ModemAt $null ''
 Assert-True ($at.Channel.Name -eq 'Fibocom AT' -and $at.Profile.Id -eq 'FibocomGt') 'Missing Intel service falls through to Fibocom GT'
 Assert-Equal 1 @($at.Tried).Count 'Rejected services are listed'
-$script:mockAt = @{ 'Fibocom AT' = { param($c) $null } }
+$script:mockAt = @{ 'Fibocom AT' = { $null } }
 $at = Initialize-ModemAt $null ''
 Assert-True ($null -eq $at.Channel -and $at.Error -eq 'no AT channel (4 MBIM services tried)') 'A silent service without a Profile is rejected'
 Write-Output 'PASS: AT channel and command set detection'

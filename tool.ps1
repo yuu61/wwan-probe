@@ -6,13 +6,20 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$tests = @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'tests') -Filter '*.ps1' -File -Recurse)
 $targets = @(
     Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'src') -Filter '*.ps1' -File -Recurse
     Get-Item -LiteralPath (Join-Path $PSScriptRoot 'lte_monitor.ps1')
+    $tests
 )
 
 if ($Task -eq 'lint') {
-    $findings = @($targets | ForEach-Object { Invoke-ScriptAnalyzer -Path $_.FullName })
+    # Tests call Assert-* with positional arguments and build in-memory fixtures with New-* helpers.
+    $testOptions = @{ ExcludeRule = 'PSAvoidUsingPositionalParameters', 'PSUseShouldProcessForStateChangingFunctions' }
+    $findings = @($targets | ForEach-Object {
+            $options = if ($_.FullName -in $tests.FullName) { $testOptions } else { @{} }
+            Invoke-ScriptAnalyzer -Path $_.FullName @options
+        })
     if ($findings.Count -gt 0) {
         $findings | Out-Host
         throw "Lint failed: $($findings.Count) finding(s)."

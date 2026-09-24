@@ -3,10 +3,10 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 foreach ($file in @(
-    'src/application/MonitorSession.ps1', 'src/application/MonitorSampler.ps1',
-    'src/application/SnapshotLog.ps1', 'src/infrastructure/CsvFile.ps1',
-    'src/presentation/Frame.ps1', 'src/presentation/TuiMonitor.ps1'
-)) { . (Join-Path $root $file) }
+        'src/application/MonitorSession.ps1', 'src/application/MonitorSampler.ps1',
+        'src/application/SnapshotLog.ps1', 'src/infrastructure/CsvFile.ps1',
+        'src/presentation/Frame.ps1', 'src/presentation/TuiMonitor.ps1'
+    )) { . (Join-Path $root $file) }
 
 function Assert-True($Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
@@ -34,14 +34,14 @@ function New-TestSampler([int]$DelayMs = 600) {
     $sampler = New-MonitorSampler
     $sampler.Pipeline.Runspace.SessionStateProxy.SetVariable('TestDelayMs', $DelayMs)
     $null = $sampler.Pipeline.AddScript({
-        function Get-LteSnapshot($Modem) {
-            Start-Sleep -Milliseconds $TestDelayMs
-            [pscustomobject]@{
-                Timestamp = 'test'; Serving = @([pscustomobject]@{ RsrpDbm = -90; RsrqDb = -10 })
-                Rssnr = 10; RxKB = 1; TxKB = 2; TempC = 30; Downgrade = $null
+            function Get-LteSnapshot($Modem) {
+                Start-Sleep -Milliseconds $TestDelayMs
+                [pscustomobject]@{
+                    Timestamp = 'test'; Serving = @([pscustomobject]@{ RsrpDbm = -90; RsrqDb = -10 })
+                    Rssnr = 10; RxKB = 1; TxKB = 2; TempC = 30; Downgrade = $null
+                }
             }
-        }
-    }).Invoke()
+        }).Invoke()
     return $sampler
 }
 
@@ -166,7 +166,7 @@ $sampler = New-TestSampler -DelayMs 50
 try {
     $session = New-TestSession -Count 2
     $view = New-TestView
-    $script:onFrame = { param($Session, $View) }
+    $script:onFrame = { }
     Invoke-TuiLoop $session $view $sampler
     Assert-True ($session.Iteration -eq 2 -and $session.History.Rsrp.Count -eq 2) 'Interval=0 failed.'
     Start-MonitorSample $sampler $null
@@ -183,16 +183,19 @@ $sampler = New-TestSampler -DelayMs 0
 try {
     $sampler.Pipeline.Commands.Clear()
     $null = $sampler.Pipeline.AddScript({
-        $script:OriginalSnapshot = ${function:Get-LteSnapshot}
-        function Get-LteSnapshot($Modem) {
-            try { Get-Item -LiteralPath 'MissingMonitorTestDrive:/missing' -ErrorAction Stop }
-            catch { }
-            & $script:OriginalSnapshot $Modem
-        }
-    }).Invoke()
+            $script:OriginalSnapshot = ${function:Get-LteSnapshot}
+            function Get-LteSnapshot {
+                # The swallowed error is the case under test.
+                [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingEmptyCatchBlock', '')]
+                param($Modem)
+                try { Get-Item -LiteralPath 'MissingMonitorTestDrive:/missing' -ErrorAction Stop }
+                catch { }
+                & $script:OriginalSnapshot $Modem
+            }
+        }).Invoke()
     $session = New-TestSession -Count 2
     $view = New-TestView
-    $script:onFrame = { param($Session, $View) }
+    $script:onFrame = { }
     Invoke-TuiLoop $session $view $sampler
     Assert-True $sampler.Pipeline.HadErrors 'The handled cmdlet error was not reproduced.'
     Assert-True ($sampler.Pipeline.Streams.Error.Count -eq 0) 'Handled error escaped into the error stream.'
@@ -207,12 +210,12 @@ $sampler = New-TestSampler -DelayMs 0
 try {
     $sampler.Pipeline.Commands.Clear()
     $null = $sampler.Pipeline.AddScript({
-        $script:OriginalSnapshot = ${function:Get-LteSnapshot}
-        function Get-LteSnapshot($Modem) {
-            Write-Error 'nonterminating test failure' -ErrorAction Continue
-            & $script:OriginalSnapshot $Modem
-        }
-    }).Invoke()
+            $script:OriginalSnapshot = ${function:Get-LteSnapshot}
+            function Get-LteSnapshot($Modem) {
+                Write-Error 'nonterminating test failure' -ErrorAction Continue
+                & $script:OriginalSnapshot $Modem
+            }
+        }).Invoke()
     Start-MonitorSample $sampler $null
     while (-not $sampler.Pending.IsCompleted) { Start-Sleep -Milliseconds 25 }
     $reported = $false
