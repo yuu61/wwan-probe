@@ -42,9 +42,9 @@ function New-HandoverLog {
     param([ValidateRange(1, 10000)][int]$MaxEntries = 100)
 
     return [pscustomobject]@{
-        Entries = [System.Collections.Generic.List[object]]::new()
-        Previous = $null
-        Count = 0
+        Entries    = [System.Collections.Generic.List[object]]::new()
+        Previous   = $null
+        Count      = 0
         MaxEntries = $MaxEntries
     }
 }
@@ -72,8 +72,8 @@ function Add-HandoverLog($Log, $Snapshot) {
         ($previous.Provider -ne $current.Provider -or $previous.CellId -ne $current.CellId)) {
         $Log.Count++
         $Log.Entries.Add([pscustomobject]@{
-            Number = $Log.Count; Timestamp = $Snapshot.Timestamp; From = $previous; To = $current
-        })
+                Number = $Log.Count; Timestamp = $Snapshot.Timestamp; From = $previous; To = $current
+            })
         while ($Log.Entries.Count -gt $Log.MaxEntries) { $Log.Entries.RemoveAt(0) }
     }
     $Log.Previous = $current

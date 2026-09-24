@@ -3,7 +3,7 @@
 function Write-ConsoleLine {
     # TUI needs direct cursor-addressed console writes; Write-Output cannot do this.
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '')]
-    param([string]$Text, [string]$Color, [int]$Width, [string]$BackgroundColor = "")
+    param([string]$Text, [string]$Color, [int]$Width, [string]$BackgroundColor = '')
 
     if ($Text.Length -gt $Width) { $Text = $Text.Substring(0, $Width) }
     [Console]::ForegroundColor = $Color
@@ -32,16 +32,16 @@ function Show-Frame($Frame, [int]$Width, [int]$Height) {
             Write-ConsoleLine -Text $line.Text -Color $line.Color -Width $Width
         }
         else {
-            Write-ConsoleLine -Text "" -Color "Gray" -Width $Width
+            Write-ConsoleLine -Text '' -Color 'Gray' -Width $Width
         }
     }
     # Footer on the last row. Never write the bottom-right cell (it would scroll).
     [Console]::SetCursorPosition(0, $Height - 1)
-    Write-ConsoleLine -Text $Frame.Footer.Text -Color $Frame.Footer.Color -Width $Width -BackgroundColor "DarkCyan"
+    Write-ConsoleLine -Text $Frame.Footer.Text -Color $Frame.Footer.Color -Width $Width -BackgroundColor 'DarkCyan'
 }
 
 # Plain sequential output for redirected consoles (pipes, logs, CI).
 function Show-PlainFrame($Frame) {
     foreach ($line in $Frame.Body) { [Console]::Out.WriteLine($line.Text) }
-    [Console]::Out.WriteLine("")
+    [Console]::Out.WriteLine('')
 }

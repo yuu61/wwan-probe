@@ -17,7 +17,7 @@
 param(
     [ValidateRange(0, 86400)][int]$Interval = 0,
     [ValidateRange(0, [int]::MaxValue)][int]$Count = 0,
-    [string]$CsvPath = ""
+    [string]$CsvPath = ''
 )
 
 # Load order matters. Dot-source at top level (not inside a function) so the
@@ -52,7 +52,7 @@ catch {
 
 $modem = Get-DefaultModem
 if (-not $modem) {
-    Write-Error "Modem not found"
+    Write-Error 'Modem not found'
     exit 1
 }
 

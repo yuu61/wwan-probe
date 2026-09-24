@@ -9,42 +9,42 @@
 function New-FrameLine {
     # Pure factory (no state change), ShouldProcess is not applicable.
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
-    param([string]$Text = "", [string]$Color = "Gray")
+    param([string]$Text = '', [string]$Color = 'Gray')
 
     return [pscustomobject]@{ Text = $Text; Color = $Color }
 }
 
 function Get-SectionRule([string]$Title, [int]$Width) {
     $head = "-- $Title "
-    return $head + ("-" * [math]::Max(0, $Width - $head.Length))
+    return $head + ('-' * [math]::Max(0, $Width - $head.Length))
 }
 
 function Format-OptionalValue($Value, [string]$Format) {
-    if ($null -eq $Value) { return "n/a" }
+    if ($null -eq $Value) { return 'n/a' }
     return ($Format -f $Value)
 }
 
 # $Ca: @{ Cells; BandwidthsMHz } from +XLEC
 function Format-CarrierAggregation($Ca) {
-    if ($null -eq $Ca) { return "n/a" }
-    if ($Ca.Cells -eq 0) { return "not on LTE" }
-    $bw = ($Ca.BandwidthsMHz | ForEach-Object { if ($null -eq $_) { "?" } else { "$_" } }) -join "+"
-    $cells = if ($Ca.Cells -eq 1) { "1 cell" } else { "$($Ca.Cells) cells" }
+    if ($null -eq $Ca) { return 'n/a' }
+    if ($Ca.Cells -eq 0) { return 'not on LTE' }
+    $bw = ($Ca.BandwidthsMHz | ForEach-Object { if ($null -eq $_) { '?' } else { "$_" } }) -join '+'
+    $cells = if ($Ca.Cells -eq 1) { '1 cell' } else { "$($Ca.Cells) cells" }
     return "$cells ($bw MHz)"
 }
 
 # $Finding: current sample (Get-DowngradeFinding), $Log: Session.DowngradeLog
 function Add-DowngradeLine([System.Collections.Generic.List[object]]$Lines, $Finding, $Log) {
     if ($Finding -and $Finding.Level -eq 'Alert') {
-        $Lines.Add((New-FrameLine (" !! 2G/3G DOWNGRADE: " + ($Finding.Reasons -join "; ")) "Red"))
+        $Lines.Add((New-FrameLine (' !! 2G/3G DOWNGRADE: ' + ($Finding.Reasons -join '; ')) 'Red'))
     }
     elseif ($Finding -and $Finding.Level -eq 'Warning') {
-        $Lines.Add((New-FrameLine (" !  2G/3G cells visible: " + ($Finding.Reasons -join "; ")) "Yellow"))
+        $Lines.Add((New-FrameLine (' !  2G/3G cells visible: ' + ($Finding.Reasons -join '; ')) 'Yellow'))
     }
     if ($Log -and ($Log.AlertCount + $Log.WarningCount) -gt 0 -and -not ($Finding -and $Finding.Level -ne 'None')) {
-        $text = " !  2G/3G seen earlier (alert {0} / warning {1} samples), last {2} [{3}]: {4}" -f
-            $Log.AlertCount, $Log.WarningCount, $Log.Last, $Log.LastLevel, ($Log.LastReasons -join "; ")
-        $Lines.Add((New-FrameLine $text "DarkYellow"))
+        $text = ' !  2G/3G seen earlier (alert {0} / warning {1} samples), last {2} [{3}]: {4}' -f
+        $Log.AlertCount, $Log.WarningCount, $Log.Last, $Log.LastLevel, ($Log.LastReasons -join '; ')
+        $Lines.Add((New-FrameLine $text 'DarkYellow'))
     }
 }
 
@@ -53,17 +53,23 @@ function Add-DowngradeLine([System.Collections.Generic.List[object]]$Lines, $Fin
 # Get-ZeroBasedScale. StepUnit = unit of a value difference (dBm differences are dB).
 $script:HistoryCharts = @(
     [pscustomobject]@{ Key = '1'; Label = 'RSRP'; History = 'Rsrp'; Unit = 'dBm'; StepUnit = 'dB'; Color = 'DarkGreen'; Visible = $true
-        Scale = @{ Step = 5; MinSpan = 10; Floor = -140; Ceiling = -44 } }
+        Scale = @{ Step = 5; MinSpan = 10; Floor = -140; Ceiling = -44 }
+    }
     [pscustomobject]@{ Key = '2'; Label = 'RSRQ'; History = 'Rsrq'; Unit = 'dB'; StepUnit = 'dB'; Color = 'DarkYellow'; Visible = $true
-        Scale = @{ Step = 1; MinSpan = 4; Floor = -20; Ceiling = -3 } }
+        Scale = @{ Step = 1; MinSpan = 4; Floor = -20; Ceiling = -3 }
+    }
     [pscustomobject]@{ Key = '3'; Label = 'SNR'; History = 'Rssnr'; Unit = 'dB'; StepUnit = 'dB'; Color = 'DarkCyan'; Visible = $true
-        Scale = @{ Step = 5; MinSpan = 10; Floor = -50; Ceiling = 50 } }
+        Scale = @{ Step = 5; MinSpan = 10; Floor = -50; Ceiling = 50 }
+    }
     [pscustomobject]@{ Key = '4'; Label = 'RX'; History = 'RxKB'; Unit = 'KB/s'; StepUnit = 'KB/s'; Color = 'DarkMagenta'; Visible = $false
-        Scale = @{ ZeroBased = $true; MinMax = 10 } }
+        Scale = @{ ZeroBased = $true; MinMax = 10 }
+    }
     [pscustomobject]@{ Key = '5'; Label = 'TX'; History = 'TxKB'; Unit = 'KB/s'; StepUnit = 'KB/s'; Color = 'Magenta'; Visible = $false
-        Scale = @{ ZeroBased = $true; MinMax = 10 } }
+        Scale = @{ ZeroBased = $true; MinMax = 10 }
+    }
     [pscustomobject]@{ Key = '6'; Label = 'Temp'; History = 'TempC'; Unit = 'C'; StepUnit = 'C'; Color = 'DarkRed'; Visible = $false
-        Scale = @{ Step = 5; MinSpan = 10; Floor = -40; Ceiling = 125 }; RowsRatio = 0.5 }
+        Scale = @{ Step = 5; MinSpan = 10; Floor = -40; Ceiling = 125 }; RowsRatio = 0.5
+    }
 )
 
 # Rows for one chart: RowsRatio (default 1) of the shared chart height, rounded down, at least ChartRowsMin.
@@ -108,8 +114,8 @@ function Switch-ChartVisibility([hashtable]$Visible, [string]$Key) {
 
 # Axis label that fits 5 columns: 10000 and above as "10k".
 function Format-AxisValue([double]$Value) {
-    if ([math]::Abs($Value) -ge 10000) { return "{0:0}k" -f ($Value / 1000) }
-    return "{0:0.##}" -f $Value
+    if ([math]::Abs($Value) -ge 10000) { return '{0:0}k' -f ($Value / 1000) }
+    return '{0:0.##}' -f $Value
 }
 
 # Appends one history chart (sparkline rows + stats line) to $Lines.
@@ -132,22 +138,22 @@ function Add-HistoryChart {
         $last = $sparkRows.Count - 1
         for ($r = 0; $r -le $last; $r++) {
             # Axis labels: max on the top row, min on the bottom row (a single row shows only the label).
-            $axis = if ($last -eq 0) { "" } elseif ($r -eq 0) { $maxText } elseif ($r -eq $last) { $minText } else { "" }
-            $label = if ($r -eq 0) { $Chart.Label } else { "" }
-            $Lines.Add((New-FrameLine ((" {0,-5}{1,5} |{2}|" -f $label, $axis, $sparkRows[$r])) $Chart.Color))
+            $axis = if ($last -eq 0) { '' } elseif ($r -eq 0) { $maxText } elseif ($r -eq $last) { $minText } else { '' }
+            $label = if ($r -eq 0) { $Chart.Label } else { '' }
+            $Lines.Add((New-FrameLine ((' {0,-5}{1,5} |{2}|' -f $label, $axis, $sparkRows[$r])) $Chart.Color))
         }
-        $scaleText = "{0:0.##} {1}/level" -f (($range.Max - $range.Min) / (8 * $sparkRows.Count)), $Chart.StepUnit
-        if ($last -eq 0) { $scaleText = "scale {0}..{1} {2}, {3}" -f $minText, $maxText, $Chart.Unit, $scaleText }
+        $scaleText = '{0:0.##} {1}/level' -f (($range.Max - $range.Min) / (8 * $sparkRows.Count)), $Chart.StepUnit
+        if ($last -eq 0) { $scaleText = 'scale {0}..{1} {2}, {3}' -f $minText, $maxText, $Chart.Unit, $scaleText }
     }
     else {
-        $Lines.Add((New-FrameLine ((" {0,-10} |{1}|" -f $Chart.Label, (Get-Sparkline $visible $range.Min $range.Max $sparkWidth))) $Chart.Color))
-        $scaleText = "scale {0}..{1} {2}: _ . - ~ = + * #" -f $minText, $maxText, $Chart.Unit
+        $Lines.Add((New-FrameLine ((' {0,-10} |{1}|' -f $Chart.Label, (Get-Sparkline $visible $range.Min $range.Max $sparkWidth))) $Chart.Color))
+        $scaleText = 'scale {0}..{1} {2}: _ . - ~ = + * #' -f $minText, $maxText, $Chart.Unit
     }
     $stat = Get-SignalStatistic $Values
-    $text = if ($null -eq $stat) { "(no valid samples)" } else {
-        "min {0} / avg {1} / max {2} {3}  (n={4}, {5})" -f $stat.Min, $stat.Avg, $stat.Max, $Chart.Unit, $stat.Count, $scaleText
+    $text = if ($null -eq $stat) { '(no valid samples)' } else {
+        'min {0} / avg {1} / max {2} {3}  (n={4}, {5})' -f $stat.Min, $stat.Avg, $stat.Max, $Chart.Unit, $stat.Count, $scaleText
     }
-    $Lines.Add((New-FrameLine ((" " * ($headWidth + 1)) + $text) "DarkGray"))
+    $Lines.Add((New-FrameLine ((' ' * ($headWidth + 1)) + $text) 'DarkGray'))
 }
 
 # History section: the visible charts on one time axis; hidden ones are listed in the title.
@@ -158,18 +164,18 @@ function Add-HistorySection {
     $chartRows = if ($View.ChartRows) { $View.ChartRows } else { $script:ChartRowsDefault }
     $shown = @($script:HistoryCharts | Where-Object { $visibility[$_.Key] })
     $hidden = @($script:HistoryCharts | Where-Object { -not $visibility[$_.Key] })
-    $title = "History (primary cell)"
-    if ($hidden.Count -gt 0) { $title += "  hidden: " + (($hidden | ForEach-Object { "$($_.Key) $($_.Label)" }) -join ", ") }
-    $Lines.Add((New-FrameLine (Get-SectionRule $title $Width) "DarkCyan"))
+    $title = 'History (primary cell)'
+    if ($hidden.Count -gt 0) { $title += '  hidden: ' + (($hidden | ForEach-Object { "$($_.Key) $($_.Label)" }) -join ', ') }
+    $Lines.Add((New-FrameLine (Get-SectionRule $title $Width) 'DarkCyan'))
     foreach ($chart in $shown) {
         Add-HistoryChart -Lines $Lines -Chart $chart -Values $Session.History[$chart.History].ToArray() -Width $Width -Unicode $View.Unicode -Rows (Get-ChartRow $chart $chartRows)
     }
 }
 
 function Format-HandoverCell($Cell) {
-    return "{0} PCI:{1} PLMN:{2} EARFCN:{3} TAC:{4} RSRP:{5}" -f
-        $Cell.Band, $Cell.Pci, $Cell.Provider, $Cell.Earfcn, $Cell.Tac,
-        (Format-OptionalValue $Cell.RsrpDbm '{0}dBm')
+    return '{0} PCI:{1} PLMN:{2} EARFCN:{3} TAC:{4} RSRP:{5}' -f
+    $Cell.Band, $Cell.Pci, $Cell.Provider, $Cell.Earfcn, $Cell.Tac,
+    (Format-OptionalValue $Cell.RsrpDbm '{0}dBm')
 }
 
 # Compact recent changes on the main screen; a separate view keeps the retained
@@ -190,18 +196,18 @@ function Add-HandoverSection {
         $offset = [math]::Clamp([int]$View.HandoverOffset, 0, [math]::Max(0, $Log.Entries.Count - $pageSize))
         $View.HandoverOffset = $offset
         $end = [math]::Min($Log.Entries.Count, $offset + $pageSize)
-        $Lines.Add((New-FrameLine (" Newest first: {0}-{1} / {2} retained (limit {3})" -f ($offset + 1), $end, $Log.Entries.Count, $Log.MaxEntries) 'DarkGray'))
+        $Lines.Add((New-FrameLine (' Newest first: {0}-{1} / {2} retained (limit {3})' -f ($offset + 1), $end, $Log.Entries.Count, $Log.MaxEntries) 'DarkGray'))
         for ($i = $offset; $i -lt $end; $i++) {
             $entry = $Log.Entries[$Log.Entries.Count - 1 - $i]
             $Lines.Add((New-FrameLine " #$($entry.Number) $($entry.Timestamp) Switched to CellID:$($entry.To.CellId)" 'Yellow'))
-            $Lines.Add((New-FrameLine ("   " + (Format-HandoverCell $entry.To))))
+            $Lines.Add((New-FrameLine ('   ' + (Format-HandoverCell $entry.To))))
         }
     }
     else {
         for ($i = $Log.Entries.Count - 1; $i -ge [math]::Max(0, $Log.Entries.Count - 3); $i--) {
             $entry = $Log.Entries[$i]
-            $Lines.Add((New-FrameLine (" {0} Switched to CellID:{1} {2} PCI:{3}" -f
-                $entry.Timestamp, $entry.To.CellId, $entry.To.Band, $entry.To.Pci) 'Yellow'))
+            $Lines.Add((New-FrameLine (' {0} Switched to CellID:{1} {2} PCI:{3}' -f
+                        $entry.Timestamp, $entry.To.CellId, $entry.To.Band, $entry.To.Pci) 'Yellow'))
         }
     }
 }
@@ -214,16 +220,16 @@ function Get-MonitorFrame {
     $snapshot = $Session.Snapshot
 
     $lines = New-Object System.Collections.Generic.List[object]
-    $rule = "=" * $Width
+    $rule = '=' * $Width
 
     # Title bar
-    $status = if ($View.Done) { "DONE" } elseif ($View.Paused) { "PAUSED" } elseif ($View.Fetching) { "UPDATING" } else { "RUNNING" }
-    $countStr = if ($config.Count -eq 0) { "" } else { "/$($config.Count)" }
+    $status = if ($View.Done) { 'DONE' } elseif ($View.Paused) { 'PAUSED' } elseif ($View.Fetching) { 'UPDATING' } else { 'RUNNING' }
+    $countStr = if ($config.Count -eq 0) { '' } else { "/$($config.Count)" }
     $right = "#$($Session.Iteration)$countStr  [$status]"
-    $left = " Fibocom L860-GL LTE Signal Monitor"
+    $left = ' Fibocom L860-GL LTE Signal Monitor'
     $pad = [math]::Max(1, $Width - $left.Length - $right.Length - 1)
-    $lines.Add((New-FrameLine ($left + (" " * $pad) + $right) "Cyan"))
-    $lines.Add((New-FrameLine $rule "Cyan"))
+    $lines.Add((New-FrameLine ($left + (' ' * $pad) + $right) 'Cyan'))
+    $lines.Add((New-FrameLine $rule 'Cyan'))
 
     # 2G/3G downgrade warnings go first so they are never scrolled away
     Add-DowngradeLine -Lines $lines -Finding $(if ($snapshot) { $snapshot.Downgrade }) -Log $Session.DowngradeLog
@@ -231,7 +237,7 @@ function Get-MonitorFrame {
     if ($View.HandoverVisible) {
         Add-HandoverSection -Lines $lines -Log $Session.HandoverLog -View $View -Width $Width
         return [pscustomobject]@{
-            Body = $lines
+            Body   = $lines
             Footer = New-FrameLine ' [h] Monitor  [Up/Down] Newer/Older  [q] Quit  [p] Pause  [r] Refresh' 'Black'
         }
     }
@@ -242,33 +248,33 @@ function Get-MonitorFrame {
     $lines.Add((New-FrameLine " Radio: $($summary.RadioState)   DataClass: $($summary.DataClass)"))
     $rat = $summary.RatConfig
     if ($null -eq $rat) {
-        $lines.Add((New-FrameLine " RAT: n/a   LTE bands: n/a" "DarkGray"))
+        $lines.Add((New-FrameLine ' RAT: n/a   LTE bands: n/a' 'DarkGray'))
     }
     else {
         $legacyBands = @($rat.GsmBands | ForEach-Object { "$_" }) + @($rat.UmtsBands | ForEach-Object { "B$_" })
         $legacyAllowed = $rat.Allowed -match '2G|3G'
         $ratText = " RAT: $($rat.Allowed) (prefer $($rat.Preferred))"
         if ($legacyAllowed) { $ratText += "   2G/3G bands: $($legacyBands -join ' ')   [2G/3G enabled: downgrade possible]" }
-        $lines.Add((New-FrameLine $ratText $(if ($legacyAllowed) { "DarkYellow" } else { "DarkGray" })))
-        $lines.Add((New-FrameLine (" LTE bands: " + (($rat.LteBands | ForEach-Object { "B$_" }) -join " ")) "DarkGray"))
+        $lines.Add((New-FrameLine $ratText $(if ($legacyAllowed) { 'DarkYellow' } else { 'DarkGray' })))
+        $lines.Add((New-FrameLine (' LTE bands: ' + (($rat.LteBands | ForEach-Object { "B$_" }) -join ' ')) 'DarkGray'))
     }
 
     # Network
-    $lines.Add((New-FrameLine (Get-SectionRule "Network" $Width) "DarkCyan"))
+    $lines.Add((New-FrameLine (Get-SectionRule 'Network' $Width) 'DarkCyan'))
     if ($null -eq $snapshot) {
-        $lines.Add((New-FrameLine " Waiting for first sample..." "DarkGray"))
+        $lines.Add((New-FrameLine ' Waiting for first sample...' 'DarkGray'))
     }
     else {
         $lines.Add((New-FrameLine " $($snapshot.ProviderName) ($($snapshot.ProviderId)) | $($snapshot.DataClass) | APN: $($snapshot.Apn)"))
-        $lines.Add((New-FrameLine (" BW: {0} Mbps   RX: {1} KB/s   TX: {2} KB/s   Updated: {3}" -f $snapshot.BwMbps, $snapshot.RxKB, $snapshot.TxKB, $snapshot.Timestamp)))
-        $lines.Add((New-FrameLine (" Temp: {0}   RSSNR: {1}   CA: {2}" -f
-            (Format-OptionalValue $snapshot.TempC "{0} C"), (Format-OptionalValue $snapshot.Rssnr "{0:0.0} dB"),
-            (Format-CarrierAggregation $snapshot.Ca))))
+        $lines.Add((New-FrameLine (' BW: {0} Mbps   RX: {1} KB/s   TX: {2} KB/s   Updated: {3}' -f $snapshot.BwMbps, $snapshot.RxKB, $snapshot.TxKB, $snapshot.Timestamp)))
+        $lines.Add((New-FrameLine (' Temp: {0}   RSSNR: {1}   CA: {2}' -f
+                    (Format-OptionalValue $snapshot.TempC '{0} C'), (Format-OptionalValue $snapshot.Rssnr '{0:0.0} dB'),
+                    (Format-CarrierAggregation $snapshot.Ca))))
 
         # Serving cells
-        $lines.Add((New-FrameLine (Get-SectionRule "Serving Cell (LTE)" $Width) "DarkCyan"))
+        $lines.Add((New-FrameLine (Get-SectionRule 'Serving Cell (LTE)' $Width) 'DarkCyan'))
         if ($snapshot.Serving.Count -eq 0) {
-            $lines.Add((New-FrameLine " (no LTE serving cell)" "DarkGray"))
+            $lines.Add((New-FrameLine ' (no LTE serving cell)' 'DarkGray'))
         }
         foreach ($c in $snapshot.Serving) {
             $color = Get-QualityColor $c.Quality
@@ -286,34 +292,34 @@ function Get-MonitorFrame {
 
         # Neighbors (AT+XMCI via the Intel AT Tunnel service)
         if ($null -eq $snapshot.Neighbors) {
-            $lines.Add((New-FrameLine (Get-SectionRule "Neighbors" $Width) "DarkCyan"))
-            $reason = if ($snapshot.AtError) { $snapshot.AtError } else { "AT+XMCI failed" }
-            $lines.Add((New-FrameLine " (unavailable: $reason)" "DarkGray"))
+            $lines.Add((New-FrameLine (Get-SectionRule 'Neighbors' $Width) 'DarkCyan'))
+            $reason = if ($snapshot.AtError) { $snapshot.AtError } else { 'AT+XMCI failed' }
+            $lines.Add((New-FrameLine " (unavailable: $reason)" 'DarkGray'))
         }
         else {
-            $lines.Add((New-FrameLine (Get-SectionRule "Neighbors ($($snapshot.Neighbors.Count))" $Width) "DarkCyan"))
+            $lines.Add((New-FrameLine (Get-SectionRule "Neighbors ($($snapshot.Neighbors.Count))" $Width) 'DarkCyan'))
             if ($snapshot.Neighbors.Count -eq 0) {
-                $lines.Add((New-FrameLine " (none)" "DarkGray"))
+                $lines.Add((New-FrameLine ' (none)' 'DarkGray'))
             }
             foreach ($n in ($snapshot.Neighbors | Sort-Object RsrpDbm -Descending)) {
                 $nBar = Get-RsrpBar $n.RsrpDbm
-                $lines.Add((New-FrameLine (" {0} {1,4} dBm {2,5} dB  {3,-10} EARFCN:{4,-6} PCI:{5}" -f $nBar, $n.RsrpDbm, $n.RsrqDb, $n.Band, $n.Earfcn, $n.Pci) "Gray"))
+                $lines.Add((New-FrameLine (' {0} {1,4} dBm {2,5} dB  {3,-10} EARFCN:{4,-6} PCI:{5}' -f $nBar, $n.RsrpDbm, $n.RsrqDb, $n.Band, $n.Earfcn, $n.Pci) 'Gray'))
             }
         }
 
         # UMTS
         foreach ($u in $snapshot.Umts) {
-            $lines.Add((New-FrameLine " [UMTS] CellId:$($u.CellId) UARFCN:$($u.Uarfcn) RSCP:$($u.RscpDbm)dBm" "DarkYellow"))
+            $lines.Add((New-FrameLine " [UMTS] CellId:$($u.CellId) UARFCN:$($u.Uarfcn) RSCP:$($u.RscpDbm)dBm" 'DarkYellow'))
         }
 
         if ($snapshot.Error) {
-            $lines.Add((New-FrameLine " Error: $($snapshot.Error)" "Red"))
+            $lines.Add((New-FrameLine " Error: $($snapshot.Error)" 'Red'))
         }
     }
 
     # Footer is returned separately so it can be pinned to the bottom row.
-    $csvStr = if ($config.CsvPath) { "  CSV: $($config.CsvPath)" } else { "" }
-    $footer = New-FrameLine " [q] Quit  [p] Pause  [r] Refresh  [h] Handovers  [1-6] Chart  [g] All charts  [Up/Down] Chart rows   Interval: $($config.Interval)s$csvStr" "Black"
+    $csvStr = if ($config.CsvPath) { "  CSV: $($config.CsvPath)" } else { '' }
+    $footer = New-FrameLine " [q] Quit  [p] Pause  [r] Refresh  [h] Handovers  [1-6] Chart  [g] All charts  [Up/Down] Chart rows   Interval: $($config.Interval)s$csvStr" 'Black'
 
     return [pscustomobject]@{ Body = $lines; Footer = $footer }
 }

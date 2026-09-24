@@ -57,26 +57,26 @@ function Get-AtStatus($Modem) {
 
 function Get-LteSnapshot($Modem) {
     $snapshot = [pscustomobject]@{
-        Timestamp     = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-        ProviderName  = ""
-        ProviderId    = ""
-        DataClass     = ""
-        Apn           = ""
-        BwMbps        = 0
-        RxKB          = 0
-        TxKB          = 0
-        Serving       = @()
-        PrimaryCell   = $null  # Unfiltered first LTE cell, even when RSRP is unavailable.
-        Umts          = @()
+        Timestamp    = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+        ProviderName = ''
+        ProviderId   = ''
+        DataClass    = ''
+        Apn          = ''
+        BwMbps       = 0
+        RxKB         = 0
+        TxKB         = 0
+        Serving      = @()
+        PrimaryCell  = $null  # Unfiltered first LTE cell, even when RSRP is unavailable.
+        Umts         = @()
         # From the AT Tunnel ($null = unavailable; AtError holds the reason when the session failed)
-        Neighbors     = $null  # @() = none reported
-        TempC         = $null
-        Rssnr         = $null  # dB, assuming 0.5 dB steps (unit undocumented)
-        Ca            = $null  # @{ Cells; BandwidthsMHz }
-        AtError       = $null
+        Neighbors    = $null  # @() = none reported
+        TempC        = $null
+        Rssnr        = $null  # dB, assuming 0.5 dB steps (unit undocumented)
+        Ca           = $null  # @{ Cells; BandwidthsMHz }
+        AtError      = $null
         # 2G/3G downgrade check (Get-DowngradeFinding): @{ Level = Alert/Warning/None; Reasons }
-        Downgrade     = $null
-        Error         = $null
+        Downgrade    = $null
+        Error        = $null
     }
 
     try {
@@ -92,12 +92,12 @@ function Get-LteSnapshot($Modem) {
         if ($null -ne $primary) {
             $snapshot.PrimaryCell = [pscustomobject]@{
                 Provider = if ($primary.ProviderId) { "$($primary.ProviderId)" } else { $snapshot.ProviderId }
-                CellId = $primary.CellId
-                Band = Get-EarfcnBand $primary.ChannelNumber
-                Earfcn = $primary.ChannelNumber
-                Pci = $primary.PhysicalCellId
-                Tac = $primary.TrackingAreaCode
-                RsrpDbm = Convert-RsrpIndex $primary.ReferenceSignalReceivedPowerInDBm
+                CellId   = $primary.CellId
+                Band     = Get-EarfcnBand $primary.ChannelNumber
+                Earfcn   = $primary.ChannelNumber
+                Pci      = $primary.PhysicalCellId
+                Tac      = $primary.TrackingAreaCode
+                RsrpDbm  = Convert-RsrpIndex $primary.ReferenceSignalReceivedPowerInDBm
             }
         }
 

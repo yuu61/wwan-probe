@@ -12,11 +12,11 @@ function Convert-RsrqIndex([int]$idx) {
 }
 
 function Get-RsrpQuality([int]$dbm) {
-    if ($dbm -ge -80) { return "Excellent" }
-    if ($dbm -ge -90) { return "Good" }
-    if ($dbm -ge -100) { return "Fair" }
-    if ($dbm -ge -110) { return "Poor" }
-    return "Very Poor"
+    if ($dbm -ge -80) { return 'Excellent' }
+    if ($dbm -ge -90) { return 'Good' }
+    if ($dbm -ge -100) { return 'Fair' }
+    if ($dbm -ge -110) { return 'Poor' }
+    return 'Very Poor'
 }
 
 # Min/Max/Avg of a signal series; NaN (missing sample) is ignored.

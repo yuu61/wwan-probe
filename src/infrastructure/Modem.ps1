@@ -20,7 +20,7 @@ $script:IntelAtTunnelAtCommandCid = [uint32]1
 # after a timeout the remaining commands are skipped (also $null) so a stuck modem does not stall every call.
 function Invoke-ModemAtCommand($Modem, [string[]]$Command, [int]$TimeoutMs = 3000) {
     $service = $Modem.GetDeviceService($script:IntelAtTunnelServiceId)
-    if (-not $service) { throw "Intel AT Tunnel device service not available" }
+    if (-not $service) { throw 'Intel AT Tunnel device service not available' }
     # PowerShell's binder cannot pass/receive CsWinRT IBuffer objects directly; go through reflection.
     $send = [Windows.Networking.NetworkOperators.MobileBroadbandDeviceServiceCommandSession].GetMethod('SendSetCommandAsync')
     $responseData = [Windows.Networking.NetworkOperators.MobileBroadbandDeviceServiceCommandResult].GetProperty('ResponseData')
@@ -44,7 +44,7 @@ function Invoke-ModemAtCommand($Modem, [string[]]$Command, [int]$TimeoutMs = 300
             $text = $null
             if ($result.StatusCode -eq 0) {
                 $buffer = $responseData.GetValue($result)
-                $text = if ($buffer) { [Text.Encoding]::ASCII.GetString($toArray.Invoke($null, [object[]]@($buffer))) } else { "" }
+                $text = if ($buffer) { [Text.Encoding]::ASCII.GetString($toArray.Invoke($null, [object[]]@($buffer))) } else { '' }
             }
             $responses[$cmd] = $text
         }

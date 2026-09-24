@@ -6,8 +6,8 @@
 function Get-RsrpBar([int]$dbm) {
     # Visual bar: -140 to -44 dBm mapped to 0-20 chars
     $normalized = [math]::Max(0, [math]::Min(20, [int](($dbm + 140) / 4.8)))
-    $filled = "#" * $normalized
-    $empty = "-" * (20 - $normalized)
+    $filled = '#' * $normalized
+    $empty = '-' * (20 - $normalized)
     return "[$filled$empty]"
 }
 
@@ -58,7 +58,7 @@ function Get-SparkLevel([double]$Value, [double]$Min, [double]$Max, [int]$Levels
 # ASCII sparkline, 8 levels.
 function Get-Sparkline([double[]]$Values, [double]$Min, [double]$Max, [int]$Width) {
     $glyphs = '_', '.', '-', '~', '=', '+', '*', '#'
-    if ($Width -le 0) { return "" }
+    if ($Width -le 0) { return '' }
     if ($null -eq $Values) { $Values = @() }
     $count = [math]::Min($Values.Count, $Width)
     $sb = New-Object System.Text.StringBuilder
@@ -75,7 +75,7 @@ function Get-Sparkline([double[]]$Values, [double]$Min, [double]$Max, [int]$Widt
 function Get-BlockSparkline([double[]]$Values, [double]$Min, [double]$Max, [int]$Width, [int]$Rows = 2) {
     $Rows = [math]::Max(1, $Rows)
     $builders = @(for ($r = 0; $r -lt $Rows; $r++) { New-Object System.Text.StringBuilder })   # bottom row first
-    if ($Width -le 0) { return @($builders | ForEach-Object { "" }) }
+    if ($Width -le 0) { return @($builders | ForEach-Object { '' }) }
     if ($null -eq $Values) { $Values = @() }
     $count = [math]::Min($Values.Count, $Width)
     foreach ($b in $builders) { [void]$b.Append(' ', $Width - $count) }
@@ -93,10 +93,10 @@ function Get-BlockSparkline([double[]]$Values, [double]$Min, [double]$Max, [int]
 
 function Get-QualityColor([string]$Quality) {
     switch ($Quality) {
-        "Excellent" { return "Green" }
-        "Good" { return "Cyan" }
-        "Fair" { return "Yellow" }
-        "Poor" { return "Red" }
-        default { return "DarkRed" }
+        'Excellent' { return 'Green' }
+        'Good' { return 'Cyan' }
+        'Fair' { return 'Yellow' }
+        'Poor' { return 'Red' }
+        default { return 'DarkRed' }
     }
 }
