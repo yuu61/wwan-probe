@@ -12,7 +12,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$sourceRoot = Split-Path $PSScriptRoot -Parent
+# src/ (this file is src/infrastructure/gnss/NmeaHelper.ps1).
+$sourceRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 . (Join-Path $sourceRoot 'Load.ps1') -Components Core
 
 $statePath = Join-Path $StateDir 'state.json'

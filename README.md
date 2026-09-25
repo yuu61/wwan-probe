@@ -100,7 +100,9 @@ LTE セルを取得できない回も履歴の位置を残し、取得できた�
 domain は他のレイヤーに依存せず、application が infrastructure の取得結果にドメインルールを適用します。presentation はその結果を表示します。
 
 - **`domain/`** : 信号の評価・統計、ダウングレード判定、セル同一性とハンドオーバー履歴 (`Signal.ps1`, `Downgrade.ps1`, `Handover.ps1` など)
-- **`infrastructure/`** : ハードウェア・OS・CSV との入出力、AT 経路の検出、ベンダー別パーサーと WinRT 値の正規化 (`ModemObservation.ps1`, `AtProfile.ps1`, `SignalConversion.ps1` など)
+- **`infrastructure/`** : ハードウェア・OS・CSV との入出力 (`WinRt.ps1`, `PerfCounter.ps1`, `CsvFile.ps1`)
+  - **`modem/`** : モデムの WinRT 情報と AT 経路の検出・送受信 (`Modem.ps1`, `ModemObservation.ps1`)、ベンダー別のコマンドセットと応答パーサー (`AtProfile.ps1`, `IntelStatus.ps1`, `QuectelStatus.ps1`, `FibocomStatus.ps1` など)、WinRT 値の正規化 (`SignalConversion.ps1`)
+  - **`gnss/`** : GPS (`Gps.ps1`)、NMEA の解析と昇格ヘルパー (`Nmea.ps1`, `NmeaReceiver.ps1`, `NmeaHelper.ps1`)、GNSS ドライバー (`GnssDevice.ps1`)。`Add-Type` でコンパイルする `.cs` は、読み込む `.ps1` と同じフォルダーに置きます
 - **`application/`** : 主セル・副セルを明示した snapshot の作成、セッション更新、履歴・CSV の連携と測定の実行管理 (`MonitorSession.ps1`, `Snapshot.ps1`, `MonitorSampler.ps1` など)
 - **`presentation/`** : ユーザーインターフェース (`TuiMonitor.ps1`, `ConsoleRenderer.ps1`, `Gauge.ps1` など)
 
