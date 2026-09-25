@@ -5,12 +5,8 @@
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
 param()
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'TestHelpers.ps1')
 $root = Split-Path $PSScriptRoot -Parent
-. (Join-Path $root 'src/Load.ps1')
-
-function Assert-True($Condition, [string]$Message) {
-    if (-not $Condition) { throw $Message }
-}
 
 $now = [DateTimeOffset]'2026-09-24T12:00:00Z'
 $capture = @(

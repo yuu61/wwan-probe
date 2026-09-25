@@ -94,30 +94,47 @@ LTE セルを取得できない回も履歴の位置を残し、取得できた�
 
 （標準入出力がリダイレクトされている場合は、プレーンテキストによる逐次出力にフォールバックします）
 
-## ディレクトリ構成 (`src/`)
+## ディレクトリ構成
+
+```text
+lte_monitor.ps1      エントリーポイント (TUI / プレーン出力)
+setup.ps1            WinRT プロジェクションの DLL を lib/ に展開 (初回のみ)
+tool.ps1             リント・整形・テスト (開発用)
+src/                 本体 (下記)
+tests/               ハードウェア不要のテスト (*.Tests.ps1) と共通ヘルパー (TestHelpers.ps1)
+diagnostics/         GNSS ドライバーの診断スクリプト (本体とは独立)
+docs/                技術資料
+tools/csharp/        C# ソースの検査専用プロジェクト (実行時には使わない)
+lib/                 setup.ps1 が展開する DLL (Git 管理外)
+```
 
 本ツールは Domain-Driven Design (DDD) 風のレイヤードアーキテクチャを採用しており、`src/` 以下がそれぞれの責務に分割されています。
 domain は他のレイヤーに依存せず、application が infrastructure の取得結果にドメインルールを適用します。presentation はその結果を表示します。
 
 - **`domain/`** : 信号の評価・統計、ダウングレード判定、セル同一性とハンドオーバー履歴 (`Signal.ps1`, `Downgrade.ps1`, `Handover.ps1` など)
-- **`infrastructure/`** : ハードウェア・OS・CSV との入出力、AT 経路の検出、ベンダー別パーサーと WinRT 値の正規化 (`ModemObservation.ps1`, `AtProfile.ps1`, `SignalConversion.ps1` など)
+- **`infrastructure/`** : ハードウェア・OS・CSV との入出力 (`WinRt.ps1`, `PerfCounter.ps1`, `CsvFile.ps1`)
+  - **`modem/`** : モデムの WinRT 情報と AT 経路の検出・送受信 (`Modem.ps1`, `ModemObservation.ps1`)、ベンダー別のコマンドセットと応答パーサー (`AtProfile.ps1`, `AtResponse.ps1`, `IntelStatus.ps1`, `QuectelStatus.ps1`, `FibocomStatus.ps1` など)、WinRT 値の正規化 (`SignalConversion.ps1`)
+  - **`gnss/`** : GPS (`Gps.ps1`)、NMEA の解析と昇格ヘルパー (`Nmea.ps1`, `NmeaReceiver.ps1`, `NmeaHelper.ps1`)、GNSS ドライバー (`GnssDevice.ps1`)。`Add-Type` でコンパイルする `.cs` は、読み込む `.ps1` と同じフォルダーに置きます
 - **`application/`** : 主セル・副セルを明示した snapshot の作成、セッション更新、履歴・CSV の連携と測定の実行管理 (`MonitorSession.ps1`, `Snapshot.ps1`, `MonitorSampler.ps1` など)
-- **`presentation/`** : ユーザーインターフェース (`TuiMonitor.ps1`, `ConsoleRenderer.ps1`, `Gauge.ps1` など)
+- **`presentation/`** : ユーザーインターフェース。画面の組み立て (`Frame.ps1`) と各セクション (`HistoryChart.ps1`, `HandoverSection.ps1`, `GnssSection.ps1`)、描画とループ (`ConsoleRenderer.ps1`, `TuiMonitor.ps1`, `PlainMonitor.ps1`)、ゲージ (`Gauge.ps1`)
 
 `src/Load.ps1` が共通のロード構成を管理します。エントリーポイントは全体を、測定 runspace は `-Components Core` で表示以外の共通部分を読み込みます。
 RAT の許可設定は `AllowedRats` (GSM / UMTS / LTE / NR) と表示文言を分け、2G/3G 許可の判定結果を application から画面に渡します。
 
 ## 開発
 
-`tool.ps1` で PowerShell (リポジトリ内のすべての `.ps1`) と C# (`Add-Type` で実行時にコンパイルする `src/`・`diagnostics/` の `.cs`) のリント・整形を行います。
+`tool.ps1` で PowerShell (リポジトリ内のすべての `.ps1`) と C# (`Add-Type` で実行時にコンパイルする `src/`・`diagnostics/` の `.cs`) のリント・整形と、テストを行います。
 
 ```powershell
 .\tool.ps1 lint           # PSScriptAnalyzer と Roslyn Analyzers
 .\tool.ps1 format         # Invoke-Formatter と dotnet format (whitespace / style) で整形
 .\tool.ps1 format -Check  # 整形が必要なファイルの報告のみ (変更しない)
+.\tool.ps1 test           # tests\*.Tests.ps1 を実行 (モデム不要)
 ```
 
-- 必要なもの: PSScriptAnalyzer モジュール、.NET 10 SDK、`.\setup.ps1` で展開した `lib\` の DLL
+- 必要なもの (`lint` / `format`): PSScriptAnalyzer モジュール、.NET 10 SDK、`.\setup.ps1` で展開した `lib\` の DLL。`test` はどれも不要です
+- `test` は各テストファイルを別の `pwsh` プロセスで並列に実行します (テストは本体の関数をスタブで置き換えるため、ファイル間で共有しません)。1 ファイルだけなら `pwsh -NoProfile -File tests\Domain.Tests.ps1` のように直接実行できます
+- テストファイルは先頭で `tests\TestHelpers.ps1` を読み込みます (`src/Load.ps1` と `Assert-True` / `Assert-Equal`)。スタブはその後に定義します
 - `tests/` では位置指定パラメーター (`PSAvoidUsingPositionalParameters`) と ShouldProcess (`PSUseShouldProcessForStateChangingFunctions`) の指摘を、各テストファイル先頭の `SuppressMessageAttribute` で抑制しています
 - PSScriptAnalyzer によるリント・整形の実行中は `PATH` と `PSModulePath` を `$PSHOME` に絞っています (速度のため)。`$PSHOME` 以外のモジュールのコマンドは、コマンドを調べるルールの対象外になります
 - `global.json` で SDK を 10.0.x (インストール済みの最新の 10.0 系) に固定しています。`tool.ps1` はリポジトリ直下で `dotnet` を実行するので、どのディレクトリから呼んでもこの指定が効きます

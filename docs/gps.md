@@ -95,7 +95,7 @@ GSV は 1..N のメッセージが順番どおりそろった周期だけを採�
 
 ### 構成と後始末
 
-- ヘルパー (`src/infrastructure/NmeaHelper.ps1`) は非表示の `pwsh` で動作します。モニターが管理者なら UAC なしで起動します。
+- ヘルパー (`src/infrastructure/gnss/NmeaHelper.ps1`) は非表示の `pwsh` で動作します。モニターが管理者なら UAC なしで起動します。
   子プロセスには呼び出し元と同じ実行ポリシーを渡します。
 - ヘルパーは高精度の Geolocator を購読して Windows に測位セッションを任せます。最初の GNSS デバイスで NMEA ロギングを有効にし、GSV / GSA だけを解析します。
 - 結果は約1秒ごとに `%TEMP%\wwan-nmea-<GUID>\state.json` を置き換えて書き込み、モニターが読み取ります。GGA / RMC からは上記の測位状態の項目だけを読み、緯度・経度と時刻は書き込みません。
@@ -173,7 +173,7 @@ GSV/GSAは最後に届いた各メッセージを保持する診断用の情報�
 
 ドライバーにはNMEAロギングの現在値を読むAPIがないため、終了時は既定値の `NONE` に戻します。
 **他のNMEA診断ツールとは同時に実行しないでください。** `lte_monitor.ps1 -Nmea` と同じ名前のミューテックスを取るため、同時には実行できません。
-診断スクリプトはモニター本体の NMEA 実装 (`src/infrastructure`) を使わず、独自のネイティブ呼び出し (`diagnostics/GnssProbe.cs`) と解析で動作します。
+診断スクリプトはモニター本体の NMEA 実装 (`src/infrastructure/gnss`) を使わず、独自のネイティブ呼び出し (`diagnostics/GnssProbe.cs`) と解析で動作します。
 通常終了・例外時とも復旧を試み、失敗時は `LoggingDisableError` に理由を残します。
 プロセスの強制終了では後処理を保証できません。
 受信待ちは最大3秒ごとにキャンセルしますが、キャンセル完了はドライバーの応答に依存します。

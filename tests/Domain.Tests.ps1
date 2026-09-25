@@ -5,24 +5,7 @@
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
 param()
 $ErrorActionPreference = 'Stop'
-$root = Split-Path $PSScriptRoot -Parent
-. (Join-Path $root 'src/Load.ps1')
-
-function Assert-True($Condition, [string]$Message) {
-    if (-not $Condition) { throw $Message }
-}
-
-function Assert-Equal($Expected, $Actual, [string]$Message) {
-    if ($Expected -is [array] -or $Actual -is [array]) {
-        $e = @($Expected) -join ','
-        $a = @($Actual) -join ','
-        if ($e -ne $a) { throw "$Message (expected [$e], got [$a])" }
-        return
-    }
-    if ($Expected -ne $Actual -or ($null -eq $Expected) -ne ($null -eq $Actual)) {
-        throw "$Message (expected '$Expected', got '$Actual')"
-    }
-}
+. (Join-Path $PSScriptRoot 'TestHelpers.ps1')
 
 # AT response text from lines (CRLF, final OK).
 function New-AtResponse([string[]]$Line) { return ((@($Line) + 'OK') -join "`r`n") + "`r`n" }

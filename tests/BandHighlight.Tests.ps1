@@ -4,11 +4,7 @@
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
 param()
 $ErrorActionPreference = 'Stop'
-. (Join-Path (Split-Path $PSScriptRoot -Parent) 'src/Load.ps1')
-
-function Assert-True($Condition, [string]$Message) {
-    if (-not $Condition) { throw $Message }
-}
+. (Join-Path $PSScriptRoot 'TestHelpers.ps1')
 
 function New-TestCell([string]$Band, [int]$Earfcn, [int]$Pci) {
     [pscustomobject]@{ Band = $Band; Earfcn = $Earfcn; Pci = $Pci }
