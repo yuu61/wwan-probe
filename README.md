@@ -94,7 +94,19 @@ LTE セルを取得できない回も履歴の位置を残し、取得できた�
 
 （標準入出力がリダイレクトされている場合は、プレーンテキストによる逐次出力にフォールバックします）
 
-## ディレクトリ構成 (`src/`)
+## ディレクトリ構成
+
+```text
+lte_monitor.ps1      エントリーポイント (TUI / プレーン出力)
+setup.ps1            WinRT プロジェクションの DLL を lib/ に展開 (初回のみ)
+tool.ps1             リント・整形・テスト (開発用)
+src/                 本体 (下記)
+tests/               ハードウェア不要のテスト (*.Tests.ps1) と共通ヘルパー (TestHelpers.ps1)
+diagnostics/         GNSS ドライバーの診断スクリプト (本体とは独立)
+docs/                技術資料
+tools/csharp/        C# ソースの検査専用プロジェクト (実行時には使わない)
+lib/                 setup.ps1 が展開する DLL (Git 管理外)
+```
 
 本ツールは Domain-Driven Design (DDD) 風のレイヤードアーキテクチャを採用しており、`src/` 以下がそれぞれの責務に分割されています。
 domain は他のレイヤーに依存せず、application が infrastructure の取得結果にドメインルールを適用します。presentation はその結果を表示します。
@@ -111,15 +123,18 @@ RAT の許可設定は `AllowedRats` (GSM / UMTS / LTE / NR) と表示文言を�
 
 ## 開発
 
-`tool.ps1` で PowerShell (リポジトリ内のすべての `.ps1`) と C# (`Add-Type` で実行時にコンパイルする `src/`・`diagnostics/` の `.cs`) のリント・整形を行います。
+`tool.ps1` で PowerShell (リポジトリ内のすべての `.ps1`) と C# (`Add-Type` で実行時にコンパイルする `src/`・`diagnostics/` の `.cs`) のリント・整形と、テストを行います。
 
 ```powershell
 .\tool.ps1 lint           # PSScriptAnalyzer と Roslyn Analyzers
 .\tool.ps1 format         # Invoke-Formatter と dotnet format (whitespace / style) で整形
 .\tool.ps1 format -Check  # 整形が必要なファイルの報告のみ (変更しない)
+.\tool.ps1 test           # tests\*.Tests.ps1 を実行 (モデム不要)
 ```
 
-- 必要なもの: PSScriptAnalyzer モジュール、.NET 10 SDK、`.\setup.ps1` で展開した `lib\` の DLL
+- 必要なもの (`lint` / `format`): PSScriptAnalyzer モジュール、.NET 10 SDK、`.\setup.ps1` で展開した `lib\` の DLL。`test` はどれも不要です
+- `test` は各テストファイルを別の `pwsh` プロセスで並列に実行します (テストは本体の関数をスタブで置き換えるため、ファイル間で共有しません)。1 ファイルだけなら `pwsh -NoProfile -File tests\Domain.Tests.ps1` のように直接実行できます
+- テストファイルは先頭で `tests\TestHelpers.ps1` を読み込みます (`src/Load.ps1` と `Assert-True` / `Assert-Equal`)。スタブはその後に定義します
 - `tests/` では位置指定パラメーター (`PSAvoidUsingPositionalParameters`) と ShouldProcess (`PSUseShouldProcessForStateChangingFunctions`) の指摘を、各テストファイル先頭の `SuppressMessageAttribute` で抑制しています
 - PSScriptAnalyzer によるリント・整形の実行中は `PATH` と `PSModulePath` を `$PSHOME` に絞っています (速度のため)。`$PSHOME` 以外のモジュールのコマンドは、コマンドを調べるルールの対象外になります
 - `global.json` で SDK を 10.0.x (インストール済みの最新の 10.0 系) に固定しています。`tool.ps1` はリポジトリ直下で `dotnet` を実行するので、どのディレクトリから呼んでもこの指定が効きます

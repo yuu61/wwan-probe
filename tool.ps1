@@ -1,14 +1,36 @@
-# Usage: ./tool.ps1 lint | ./tool.ps1 format [-Check]
+# Usage: ./tool.ps1 lint | ./tool.ps1 format [-Check] | ./tool.ps1 test
 # PowerShell (every .ps1 in the repository): PSScriptAnalyzer. C# (the Add-Type sources): Roslyn
 # analyzers and dotnet format through tools/csharp/WwanProbe.csproj, which needs the .NET 10 SDK
 # (global.json) and lib/ from setup.ps1.
 # format writes UTF-8 files; format -Check only reports files needing formatting.
+# test runs the hardware-free tests (tests/*.Tests.ps1); it needs neither the SDK nor lib/.
 param(
-    [Parameter(Mandatory)][ValidateSet('lint', 'format')][string]$Task,
+    [Parameter(Mandatory)][ValidateSet('lint', 'format', 'test')][string]$Task,
     [switch]$Check
 )
 
 $ErrorActionPreference = 'Stop'
+
+function Get-RepoPath([string]$Path) { return [IO.Path]::GetRelativePath($PSScriptRoot, $Path) }
+
+if ($Task -eq 'test') {
+    # One process per file: tests replace production functions with stubs, which must not leak
+    # into another file. The files are independent, so they run in parallel (in this pwsh).
+    $tests = @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'tests') -Filter '*.Tests.ps1' -File | Sort-Object Name)
+    $results = $tests | ForEach-Object -ThrottleLimit ([Environment]::ProcessorCount) -Parallel {
+        $output = & ([Environment]::ProcessPath) -NoProfile -File $_.FullName 2>&1 | ForEach-Object { "$_" }
+        [pscustomobject]@{ Path = $_.FullName; ExitCode = $LASTEXITCODE; Output = $output -join "`n" }
+    }
+    $failed = @($results | Where-Object ExitCode -NE 0 | Sort-Object Path)
+    foreach ($result in $failed) { "--- $(Get-RepoPath $result.Path)`n$($result.Output)" | Out-Host }
+    foreach ($result in $results | Sort-Object Path) {
+        Write-Output "$(if ($result.ExitCode -eq 0) { 'Passed' } else { 'Failed' }): $(Get-RepoPath $result.Path)"
+    }
+    if ($failed.Count -gt 0) { throw "Tests failed: $($failed.Count) of $($tests.Count) file(s) (details above)." }
+    Write-Output "Tests passed: $($tests.Count) file(s)."
+    return
+}
+
 $csproj = Join-Path $PSScriptRoot 'tools/csharp/WwanProbe.csproj'
 if (-not (Get-Command dotnet -CommandType Application -ErrorAction SilentlyContinue)) {
     throw 'The .NET 10 SDK (dotnet) is required for the C# sources.'
@@ -17,8 +39,6 @@ if (-not (Get-Command dotnet -CommandType Application -ErrorAction SilentlyConti
 if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'lib/Microsoft.Windows.SDK.NET.dll'))) {
     throw 'lib/ is missing. Run ./setup.ps1 first.'
 }
-
-function Get-RepoPath([string]$Path) { return [IO.Path]::GetRelativePath($PSScriptRoot, $Path) }
 
 # Invoke-ScriptAnalyzer and Invoke-Formatter (PSUseCorrectCasing) look up every command name.
 # Functions defined in other files are not found, and each such lookup searches every PATH

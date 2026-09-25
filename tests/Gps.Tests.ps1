@@ -4,12 +4,7 @@
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
 param()
 $ErrorActionPreference = 'Stop'
-$root = Split-Path $PSScriptRoot -Parent
-. (Join-Path $root 'src/Load.ps1')
-
-function Assert-True($Condition, [string]$Message) {
-    if (-not $Condition) { throw $Message }
-}
+. (Join-Path $PSScriptRoot 'TestHelpers.ps1')
 
 $now = [DateTimeOffset]'2026-09-24T12:00:00Z'
 $coordinate = [pscustomobject]@{
