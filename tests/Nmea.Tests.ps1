@@ -48,7 +48,15 @@ $glonass = @($report.Satellites | Where-Object System -EQ 'GLONASS')
 Assert-True ($glonass.Count -eq 6 -and @($glonass | Where-Object Used).Id -join ',' -eq '75,84') 'GLONASS usage did not match GNGSA system 2.'
 Assert-True ($null -eq ($glonass | Where-Object Id -EQ 74).SnrDbHz) 'An untracked satellite got an SNR.'
 $order = @($report.Satellites | ForEach-Object { "$($_.System):$($_.Id)" })
-Assert-True (($order[0..4] -join ',') -eq 'GPS:8,GLONASS:75,GLONASS:84,GPS:27,GPS:10' -and $order[-1] -eq 'GLONASS:86') 'Satellites are not sorted by SNR (ties by constellation and ID, no SNR last).'
+Assert-True (($order[0..8] -join ',') -eq 'GPS:8,GLONASS:75,GLONASS:84,GPS:27,GPS:10,GPS:2,GPS:7,GLONASS:74,GPS:1' -and
+    ($order[-3..-1] -join ',') -eq 'GPS:3,GPS:17,GPS:23') 'Satellites are not sorted by use, SNR, elevation and ID.'
+# A used satellite precedes a stronger unused one; equal SNR and elevation fall back to constellation order.
+$sortState = New-NmeaSatelliteState
+Add-NmeaSentence $sortState '$GPGSV,1,1,03,05,10,100,40,06,20,200,30,07,30,300,,1*00' $now
+Add-NmeaSentence $sortState '$GLGSV,1,1,01,70,10,100,40,1*00' $now
+Add-NmeaSentence $sortState ('$GPGSA,A,3,06' + (',' * 11) + ',2.0,1.0,1.0,1*00') $now
+$sortOrder = @((Get-NmeaSatelliteReport $sortState $now).Satellites | ForEach-Object { "$($_.System):$($_.Id)" }) -join ','
+Assert-True ($sortOrder -eq 'GPS:6,GPS:5,GLONASS:70,GPS:7') "Unexpected sort priority: $sortOrder"
 
 # An incomplete or out-of-order cycle never replaces the last complete one.
 Add-NmeaSentence $state '$GPGSV,3,1,01,05,10,100,30,1*00' $now

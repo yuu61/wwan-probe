@@ -192,8 +192,11 @@ function Get-NmeaSatelliteReport($State, [DateTimeOffset]$Now, [int]$MaxAgeSecon
             $row
         }
     }
-    # Strongest first; untracked satellites (no SNR) last. Ties keep constellation order.
-    $satellites = @($satellites | Sort-Object @{ Expression = { if ($null -eq $_.SnrDbHz) { -1 } else { $_.SnrDbHz } }; Descending = $true },
+    # Used in the fix first, then strongest, then highest; a missing SNR or elevation sorts last.
+    # Remaining ties: constellation order, ID, signal.
+    $satellites = @($satellites | Sort-Object @{ Expression = 'Used'; Descending = $true },
+        @{ Expression = { if ($null -eq $_.SnrDbHz) { -1 } else { $_.SnrDbHz } }; Descending = $true },
+        @{ Expression = { if ($null -eq $_.ElevationDeg) { -1 } else { $_.ElevationDeg } }; Descending = $true },
         @{ Expression = { $script:NmeaSystems.IndexOf($_.System) } }, Id, Signal)
     $gga = $State.Fix['GGA']
     $rmc = $State.Fix['RMC']
