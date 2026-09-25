@@ -47,7 +47,8 @@ Assert-True ($gps2.ElevationDeg -eq 87 -and $gps2.AzimuthDeg -eq 163 -and $gps2.
 $glonass = @($report.Satellites | Where-Object System -EQ 'GLONASS')
 Assert-True ($glonass.Count -eq 6 -and @($glonass | Where-Object Used).Id -join ',' -eq '75,84') 'GLONASS usage did not match GNGSA system 2.'
 Assert-True ($null -eq ($glonass | Where-Object Id -EQ 74).SnrDbHz) 'An untracked satellite got an SNR.'
-Assert-True ($report.Satellites[0].System -eq 'GPS' -and $report.Satellites[-1].System -eq 'GLONASS') 'Satellites are not in constellation order.'
+$order = @($report.Satellites | ForEach-Object { "$($_.System):$($_.Id)" })
+Assert-True (($order[0..4] -join ',') -eq 'GPS:8,GLONASS:75,GLONASS:84,GPS:27,GPS:10' -and $order[-1] -eq 'GLONASS:86') 'Satellites are not sorted by SNR (ties by constellation and ID, no SNR last).'
 
 # An incomplete or out-of-order cycle never replaces the last complete one.
 Add-NmeaSentence $state '$GPGSV,3,1,01,05,10,100,30,1*00' $now
@@ -163,7 +164,8 @@ $frame = Get-MonitorFrame $session $view 100
 $rows = @($frame.Body | Where-Object { $_.Text -match '^ (GPS|GLONASS) ' })
 Assert-True ($rows.Count -eq 18 -and $frame.Footer.Text -match '\[s\] Monitor') 'The satellite list is incomplete.'
 Assert-True (@($rows | Where-Object Color -EQ 'Green').Count -eq 12 -and @($rows | Where-Object Color -EQ 'Magenta').Count -eq 6) 'Constellations are not colored.'
-Assert-True ($rows[0].Text -match '^ GPS +1 +1 +59 +199 +n/a +\[ +not tracked +\]' -and ($rows | Where-Object Text -Match '^ GPS +2 ').Text -match ' yes ') 'A satellite row is misformatted.'
+Assert-True ($rows[0].Text -match '^ GPS +8 +1 +60 +31 +32 +yes ' -and ($rows | Where-Object Text -Match '^ GPS +1 ').Text -match '^ GPS +1 +1 +59 +199 +n/a +\[ +not tracked +\]' -and
+    ($rows | Where-Object Text -Match '^ GPS +2 ').Text -match ' yes ') 'A satellite row is misformatted or not sorted by SNR.'
 $view.LastHeight = 12
 $view.SatelliteOffset = 99
 $frame = Get-MonitorFrame $session $view 100
