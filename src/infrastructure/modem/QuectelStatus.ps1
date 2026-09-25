@@ -3,11 +3,6 @@
 # Not verified on hardware. Every parser returns $null when the response is missing, "ERROR",
 # or carries no usable value. Values "-" mean invalid. Cells use the common AT cell shape (AtProfile.ps1).
 
-# LTE bandwidth in resource blocks (QCAINFO, +GTCAINFO) -> MHz.
-$script:LteRbBandwidthMHz = @{ 6 = 1.4; 15 = 3; 25 = 5; 50 = 10; 75 = 15; 100 = 20 }
-# LTE bandwidth index (QENG <DL_bandwidth>, +XLEC) -> MHz.
-$script:LteIndexBandwidthMHz = @(1.4, 3, 5, 10, 15, 20)
-
 function Get-QuectelLteDbm([string]$Text) {
     $v = ConvertFrom-AtInt $Text
     if ($null -eq $v -or $v -lt -140 -or $v -gt -44) { return $null }

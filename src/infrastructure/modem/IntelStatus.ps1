@@ -1,38 +1,7 @@
 # Infrastructure: AT status response parsing for Intel XMM modems (Fibocom L860-GL etc.) (pure, no I/O).
 # Reference: FIBOCOM L860 AT Commands User Manual V3.2.3 (see docs/neighbor-cells.md).
 # Every parser returns $null when the response is missing, "ERROR", or the value is invalid.
-# Get-AtResponseField / Get-AtResponseLine are shared by the other vendors' parsers.
-
-# Fields of the first "+<Name>: a,b,c" line, or $null.
-function Get-AtResponseField([string]$Response, [string]$Name) {
-    if (-not $Response -or $Response -notmatch '(?m)^OK\s*$') { return $null }
-    if ($Response -notmatch "(?m)^\+$([regex]::Escape($Name)):\s*(.+?)\s*$") { return $null }
-    return , @($Matches[1] -split ',' | ForEach-Object { $_.Trim() })
-}
-
-# Fields of every "+<Name>: ..." line (quotes stripped), or $null when the response is not OK.
-# Lines of other commands and unprefixed lines are skipped.
-function Get-AtResponseLine([string]$Response, [string]$Name) {
-    if (-not $Response -or $Response -notmatch '(?m)^OK\s*$') { return $null }
-    $lines = @()
-    foreach ($m in [regex]::Matches($Response, "(?m)^\+$([regex]::Escape($Name)):\s*(.*?)\s*$")) {
-        $lines += , @($m.Groups[1].Value -split ',' | ForEach-Object { $_.Trim().Trim('"') })
-    }
-    return , $lines
-}
-
-# Integer from an AT field, or $null ("-", empty, or not a number). Accepts a "0x" hex prefix.
-function ConvertFrom-AtInt([string]$Text, [switch]$Hex) {
-    $Text = "$Text".Trim().Trim('"')
-    if ($Text -match '^0x([0-9A-Fa-f]+)$') { $Text = $Matches[1]; $Hex = $true }
-    $n = [long]0
-    if ($Hex) {
-        if ([long]::TryParse($Text, [Globalization.NumberStyles]::HexNumber, $null, [ref]$n)) { return $n }
-        return $null
-    }
-    if ([long]::TryParse($Text, [ref]$n)) { return $n }
-    return $null
-}
+# XMCI cells are parsed in IntelCellMeasurement.ps1; shared helpers are in AtResponse.ps1.
 
 # AT+MTSM=1 -> "+MTSM: <Temp>" (Celsius, -40..125)
 function ConvertFrom-MtsmResponse([string]$Response) {
@@ -62,7 +31,7 @@ function ConvertFrom-XlecResponse([string]$Response) {
     if ($null -eq $f -or $f.Count -lt 2) { return $null }
     $cells = 0
     if (-not [int]::TryParse($f[1], [ref]$cells) -or $cells -lt 0 -or $cells -gt 5) { return $null }
-    $mhz = @(1.4, 3, 5, 10, 15, 20)
+    $mhz = $script:LteIndexBandwidthMHz
     $bandwidths = @()
     for ($i = 0; $i -lt $cells -and (2 + $i) -lt $f.Count; $i++) {
         $bw = 0

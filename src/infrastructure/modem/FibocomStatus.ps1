@@ -2,8 +2,7 @@
 # Reference: FM350 AT Commands User Manual V2.10 (see docs/modem-support.md). Number bases of
 # +GTCCINFO fields were taken from real FM350 output (TAC / cell ID hex, EARFCN / PCI decimal).
 # Not verified on hardware. Every parser returns $null when the response is missing or "ERROR".
-# Depends on ModemStatus.ps1 (Get-AtResponseLine, ConvertFrom-AtInt) and QuectelStatus.ps1
-# ($script:LteRbBandwidthMHz).
+# Depends on AtResponse.ps1 (Get-AtResponseLine, ConvertFrom-AtInt, $script:LteRbBandwidthMHz).
 
 # +GTCCINFO rsrp / rsrq index -> dBm / dB, or $null. rsrp 0 means "below -140 dBm or not detectable"
 # and is treated as not measured; 255 = unknown for both.

@@ -11,6 +11,7 @@ $monitorSources = @(
     'infrastructure/PerfCounter.ps1'
     'infrastructure/CsvFile.ps1'
     'infrastructure/modem/SignalConversion.ps1'
+    'infrastructure/modem/AtResponse.ps1'
     'infrastructure/modem/IntelCellMeasurement.ps1'
     'infrastructure/modem/IntelStatus.ps1'
     'infrastructure/modem/QuectelStatus.ps1'
@@ -30,6 +31,9 @@ $monitorSources = @(
 if ($Components -eq 'All') {
     $monitorSources += @(
         'presentation/Gauge.ps1'
+        'presentation/HistoryChart.ps1'
+        'presentation/HandoverSection.ps1'
+        'presentation/GnssSection.ps1'
         'presentation/Frame.ps1'
         'presentation/ConsoleRenderer.ps1'
         'presentation/PlainMonitor.ps1'

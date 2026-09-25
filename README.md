@@ -101,10 +101,10 @@ domain は他のレイヤーに依存せず、application が infrastructure の
 
 - **`domain/`** : 信号の評価・統計、ダウングレード判定、セル同一性とハンドオーバー履歴 (`Signal.ps1`, `Downgrade.ps1`, `Handover.ps1` など)
 - **`infrastructure/`** : ハードウェア・OS・CSV との入出力 (`WinRt.ps1`, `PerfCounter.ps1`, `CsvFile.ps1`)
-  - **`modem/`** : モデムの WinRT 情報と AT 経路の検出・送受信 (`Modem.ps1`, `ModemObservation.ps1`)、ベンダー別のコマンドセットと応答パーサー (`AtProfile.ps1`, `IntelStatus.ps1`, `QuectelStatus.ps1`, `FibocomStatus.ps1` など)、WinRT 値の正規化 (`SignalConversion.ps1`)
+  - **`modem/`** : モデムの WinRT 情報と AT 経路の検出・送受信 (`Modem.ps1`, `ModemObservation.ps1`)、ベンダー別のコマンドセットと応答パーサー (`AtProfile.ps1`, `AtResponse.ps1`, `IntelStatus.ps1`, `QuectelStatus.ps1`, `FibocomStatus.ps1` など)、WinRT 値の正規化 (`SignalConversion.ps1`)
   - **`gnss/`** : GPS (`Gps.ps1`)、NMEA の解析と昇格ヘルパー (`Nmea.ps1`, `NmeaReceiver.ps1`, `NmeaHelper.ps1`)、GNSS ドライバー (`GnssDevice.ps1`)。`Add-Type` でコンパイルする `.cs` は、読み込む `.ps1` と同じフォルダーに置きます
 - **`application/`** : 主セル・副セルを明示した snapshot の作成、セッション更新、履歴・CSV の連携と測定の実行管理 (`MonitorSession.ps1`, `Snapshot.ps1`, `MonitorSampler.ps1` など)
-- **`presentation/`** : ユーザーインターフェース (`TuiMonitor.ps1`, `ConsoleRenderer.ps1`, `Gauge.ps1` など)
+- **`presentation/`** : ユーザーインターフェース。画面の組み立て (`Frame.ps1`) と各セクション (`HistoryChart.ps1`, `HandoverSection.ps1`, `GnssSection.ps1`)、描画とループ (`ConsoleRenderer.ps1`, `TuiMonitor.ps1`, `PlainMonitor.ps1`)、ゲージ (`Gauge.ps1`)
 
 `src/Load.ps1` が共通のロード構成を管理します。エントリーポイントは全体を、測定 runspace は `-Components Core` で表示以外の共通部分を読み込みます。
 RAT の許可設定は `AllowedRats` (GSM / UMTS / LTE / NR) と表示文言を分け、2G/3G 許可の判定結果を application から画面に渡します。
